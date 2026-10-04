@@ -25,6 +25,11 @@ export default function MilkSubTab({
       return;
     }
 
+    if (!apartment || !apartment.name || (apartment.status && apartment.status !== 'active')) {
+      showToast('Please select an active delivery apartment in HMT Nagar', 'error');
+      return;
+    }
+
     try {
       setSubmitting(true);
       const res = await createSubscription({

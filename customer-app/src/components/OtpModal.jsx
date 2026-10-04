@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Phone, KeyRound, ShieldCheck, ArrowRight, UserPlus } from 'lucide-react';
-import { sendOtp, verifyOtp, registerCustomer, setToken, setCurrentCustomer } from '../api';
-import { APARTMENTS_LIST, translations } from '../translations';
+import { sendOtp, verifyOtp, registerCustomer, setToken, setCurrentCustomer, getApartments } from '../api';
+import { translations } from '../translations';
 
 export default function OtpModal({ isOpen, onClose, onLoginSuccess, apartment, lang, showToast }) {
   const t = translations[lang];
@@ -11,13 +11,26 @@ export default function OtpModal({ isOpen, onClose, onLoginSuccess, apartment, l
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(300); // 5 minutes
   const [devOtp, setDevOtp] = useState('');
+  const [activeApts, setActiveApts] = useState([]);
 
   // Onboarding fields for new user
   const [name, setName] = useState('');
-  const [selectedApartment, setSelectedApartment] = useState(apartment?.name || 'Raghavendra Nilayam');
+  const [selectedApartmentId, setSelectedApartmentId] = useState(apartment?.id || 1);
+  const [selectedApartment, setSelectedApartment] = useState(apartment?.name || 'Shneha Apartment');
   const [block, setBlock] = useState(apartment?.block || 'Block A');
   const [flat, setFlat] = useState(apartment?.flat || '101');
   const [referral, setReferral] = useState('');
+
+  useEffect(() => {
+    getApartments().then(data => {
+      const active = (data || []).filter(a => a.status === 'active');
+      setActiveApts(active);
+      if (active.length && !apartment?.name) {
+        setSelectedApartmentId(active[0].id);
+        setSelectedApartment(active[0].name);
+      }
+    }).catch(() => {});
+  }, [apartment]);
 
   // 5 minute countdown timer
   useEffect(() => {
@@ -97,6 +110,7 @@ export default function OtpModal({ isOpen, onClose, onLoginSuccess, apartment, l
       const profile = await registerCustomer({
         name: name.trim(),
         phone: phone.replace(/[^0-9]/g, ''),
+        apartment_id: selectedApartmentId,
         apartment_name: selectedApartment,
         block_wing: block,
         flat_number: flat,
@@ -243,12 +257,17 @@ export default function OtpModal({ isOpen, onClose, onLoginSuccess, apartment, l
                 Apartment in HMT Nagar
               </label>
               <select
-                value={selectedApartment}
-                onChange={(e) => setSelectedApartment(e.target.value)}
+                value={selectedApartmentId}
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  setSelectedApartmentId(id);
+                  const found = activeApts.find(a => a.id === id);
+                  if (found) setSelectedApartment(found.name);
+                }}
                 className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2d6a4f]"
               >
-                {APARTMENTS_LIST.map((apt) => (
-                  <option key={apt} value={apt}>{apt}</option>
+                {activeApts.map((apt) => (
+                  <option key={apt.id} value={apt.id}>{apt.name}</option>
                 ))}
               </select>
             </div>

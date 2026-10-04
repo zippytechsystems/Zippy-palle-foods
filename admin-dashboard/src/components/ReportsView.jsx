@@ -38,7 +38,7 @@ export default function ReportsView({ lang, showToast }) {
     if (!data) return;
 
     let csvContent = 'data:text/csv;charset=utf-8,';
-    csvContent += 'MANA PALLE FRESH - BUSINESS REPORT\n';
+    csvContent += 'PALLE NATURAL FOODS - BUSINESS REPORT\n';
     csvContent += `Period: ${period.toUpperCase()}\n`;
     csvContent += `Generated On: ${new Date().toLocaleString()}\n\n`;
 

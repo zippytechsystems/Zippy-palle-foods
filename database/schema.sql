@@ -13,7 +13,9 @@ DROP TABLE IF EXISTS `orders`;
 DROP TABLE IF EXISTS `subscriptions`;
 DROP TABLE IF EXISTS `rate_history`;
 DROP TABLE IF EXISTS `products`;
+DROP TABLE IF EXISTS `apartment_leads`;
 DROP TABLE IF EXISTS `customers`;
+DROP TABLE IF EXISTS `apartments`;
 DROP TABLE IF EXISTS `alerts`;
 DROP TABLE IF EXISTS `otp_codes`;
 
@@ -48,11 +50,33 @@ CREATE TABLE `rate_history` (
     CONSTRAINT `fk_rate_history_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 3. CUSTOMERS TABLE (HMT Nagar apartment residents)
+-- 3. APARTMENTS TABLE (Hyperlocal communities)
+CREATE TABLE `apartments` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(120) NOT NULL UNIQUE,
+  `area` VARCHAR(120) DEFAULT 'HMT Nagar',
+  `status` ENUM('active','launching_soon','inactive') DEFAULT 'launching_soon',
+  `launch_date` DATE NULL,
+  `sort_order` INT DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4. APARTMENT LEADS TABLE (Waitlist / Notify me for launching_soon apartments)
+CREATE TABLE `apartment_leads` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `apartment_id` INT NOT NULL,
+  `phone` VARCHAR(20) NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`apartment_id`) REFERENCES `apartments`(`id`) ON DELETE CASCADE,
+  UNIQUE KEY `unique_apartment_lead` (`apartment_id`, `phone`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5. CUSTOMERS TABLE (HMT Nagar apartment residents)
 CREATE TABLE `customers` (
     `id` VARCHAR(64) NOT NULL,
     `name` VARCHAR(120) NOT NULL,
     `phone` VARCHAR(20) NOT NULL,
+    `apartment_id` INT NULL,
     `apartment_name` VARCHAR(150) NOT NULL,
     `block_wing` VARCHAR(30) DEFAULT 'A',
     `flat_number` VARCHAR(30) NOT NULL,
@@ -61,7 +85,8 @@ CREATE TABLE `customers` (
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uniq_customers_phone` (`phone`),
-    KEY `idx_customers_apartment` (`apartment_name`)
+    KEY `idx_customers_apartment` (`apartment_id`),
+    CONSTRAINT `fk_customer_apartment` FOREIGN KEY (`apartment_id`) REFERENCES `apartments` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 4. ORDERS TABLE

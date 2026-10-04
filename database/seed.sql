@@ -24,22 +24,35 @@ INSERT INTO `rate_history` (`product_id`, `old_price`, `new_price`, `old_buy_pri
 ('prod-mut-curry', 820.00, 850.00, 650.00, 680.00, NOW() - INTERVAL 3 DAY),
 ('prod-milk-morning', 85.00, 90.00, 65.00, 70.00, NOW() - INTERVAL 5 DAY);
 
--- 3. SEED 6 PILOT APARTMENT CUSTOMERS IN HMT NAGAR
-INSERT INTO `customers` (`id`, `name`, `phone`, `apartment_name`, `block_wing`, `flat_number`, `referral_code`) VALUES
-('c0000001-0000-0000-0000-000000000001', 'Srinivas Rao', '98490 12345', 'Raghavendra Nilayam', 'Block A', '204', 'PALLE-SRI01'),
-('c0000002-0000-0000-0000-000000000002', 'Vani Sharma', '98490 23456', 'Raghavendra Nilayam', 'Block B', '302', 'PALLE-VAN02'),
-('c0000003-0000-0000-0000-000000000003', 'Rajesh Kumar', '98490 34567', 'Aditya Enclave', 'Wing 1', '402', 'PALLE-RAJ03'),
-('c0000004-0000-0000-0000-000000000004', 'Kavitha Reddy', '98490 45678', 'Sri Sai Srinivas Residency', 'Block B', '105', 'PALLE-KAV04'),
-('c0000005-0000-0000-0000-000000000005', 'Venkat Ramana', '98490 56789', 'Venkateshwara Towers', 'Tower 1', '501', 'PALLE-VEN05'),
-('c0000006-0000-0000-0000-000000000006', 'Lakshmi Prasanna', '98490 67890', 'Kakatiya Heights', 'North Wing', '203', 'PALLE-LAK06')
+-- 3. SEED APARTMENTS (Active in exact order + Launching Soon)
+INSERT INTO `apartments` (`id`, `name`, `area`, `status`, `sort_order`) VALUES
+(1, 'Shneha Apartment',      'HMT Nagar', 'active', 1),
+(2, 'Amdur Castle Apartment', 'HMT Nagar', 'active', 2),
+(3, 'Pally Residency',       'HMT Nagar', 'active', 3),
+(4, 'Srinivasa Heights',      'HMT Nagar', 'launching_soon', 4)
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`), `sort_order` = VALUES(`sort_order`);
+
+-- Sample waitlist lead for launching soon apartment
+INSERT INTO `apartment_leads` (`apartment_id`, `phone`) VALUES
+(4, '98490 99887')
+ON DUPLICATE KEY UPDATE `phone` = VALUES(`phone`);
+
+-- 4. SEED 6 PILOT APARTMENT CUSTOMERS IN HMT NAGAR
+INSERT INTO `customers` (`id`, `name`, `phone`, `apartment_id`, `apartment_name`, `block_wing`, `flat_number`, `referral_code`) VALUES
+('c0000001-0000-0000-0000-000000000001', 'Srinivas Rao', '98490 12345', 1, 'Shneha Apartment', 'Block A', '204', 'PALLE-SRI01'),
+('c0000002-0000-0000-0000-000000000002', 'Vani Sharma', '98490 23456', 1, 'Shneha Apartment', 'Block B', '302', 'PALLE-VAN02'),
+('c0000003-0000-0000-0000-000000000003', 'Rajesh Kumar', '98490 34567', 2, 'Amdur Castle Apartment', 'Wing 1', '402', 'PALLE-RAJ03'),
+('c0000004-0000-0000-0000-000000000004', 'Kavitha Reddy', '98490 45678', 3, 'Pally Residency', 'Block B', '105', 'PALLE-KAV04'),
+('c0000005-0000-0000-0000-000000000005', 'Venkat Ramana', '98490 56789', 2, 'Amdur Castle Apartment', 'Tower 1', '501', 'PALLE-VEN05'),
+('c0000006-0000-0000-0000-000000000006', 'Lakshmi Prasanna', '98490 67890', 3, 'Pally Residency', 'North Wing', '203', 'PALLE-LAK06')
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
--- 4. SEED SAMPLE ORDERS
+-- 5. SEED SAMPLE ORDERS
 INSERT INTO `orders` (`id`, `customer_id`, `apartment_name`, `block_wing`, `flat_number`, `delivery_date`, `delivery_slot`, `total_amount`, `payment_method`, `paid`, `status`, `notes`) VALUES
-('ORD-1001', 'c0000001-0000-0000-0000-000000000001', 'Raghavendra Nilayam', 'Block A', '204', CURDATE(), 'morning', 940.00, 'upi', 1, 'confirmed', 'Medium curry cut, deliver before 7 AM'),
-('ORD-1002', 'c0000002-0000-0000-0000-000000000002', 'Raghavendra Nilayam', 'Block B', '302', CURDATE(), 'morning', 260.00, 'cod', 0, 'placed', 'Fish cleaned and steaks sliced'),
-('ORD-1003', 'c0000003-0000-0000-0000-000000000003', 'Aditya Enclave', 'Wing 1', '402', CURDATE(), 'evening', 850.00, 'upi', 1, 'out_for_delivery', 'Tender pieces for dinner'),
-('ORD-1004', 'c0000004-0000-0000-0000-000000000004', 'Sri Sai Srinivas Residency', 'Block B', '105', CURDATE() + INTERVAL 1 DAY, 'morning', 500.00, 'cod', 0, 'placed', 'Pre-order for tomorrow morning')
+('ORD-1001', 'c0000001-0000-0000-0000-000000000001', 'Shneha Apartment', 'Block A', '204', CURDATE(), 'morning', 940.00, 'upi', 1, 'confirmed', 'Medium curry cut, deliver before 7 AM'),
+('ORD-1002', 'c0000002-0000-0000-0000-000000000002', 'Shneha Apartment', 'Block B', '302', CURDATE(), 'morning', 260.00, 'cod', 0, 'placed', 'Fish cleaned and steaks sliced'),
+('ORD-1003', 'c0000003-0000-0000-0000-000000000003', 'Amdur Castle Apartment', 'Wing 1', '402', CURDATE(), 'evening', 850.00, 'upi', 1, 'out_for_delivery', 'Tender pieces for dinner'),
+('ORD-1004', 'c0000004-0000-0000-0000-000000000004', 'Pally Residency', 'Block B', '105', CURDATE() + INTERVAL 1 DAY, 'morning', 500.00, 'cod', 0, 'placed', 'Pre-order for tomorrow morning')
 ON DUPLICATE KEY UPDATE `status` = VALUES(`status`);
 
 -- 5. SEED ORDER ITEMS

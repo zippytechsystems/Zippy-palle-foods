@@ -417,9 +417,70 @@ app.get('/api/admin/alerts', authenticateAdmin, async (req, res) => {
   }
 });
 
+// 8. Apartments Manager (Admin only)
+app.get('/api/admin/apartments', authenticateAdmin, async (req, res) => {
+  try {
+    const apartments = await db.getAdminApartments();
+    res.json(apartments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/apartments', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, area, status, launch_date, sort_order } = req.body;
+    if (!name) return res.status(400).json({ error: 'Apartment name is required' });
+    const apt = await db.createApartment({ name, area, status, launch_date, sort_order });
+    res.status(201).json(apt);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/apartments/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const apt = await db.updateApartment(req.params.id, req.body);
+    res.json(apt);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/apartments/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await db.deleteApartment(req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================================
 // CUSTOMER APIS (Public / Protected)
 // ============================================================================
+app.get('/api/apartments', async (req, res) => {
+  try {
+    const apartments = await db.getPublicApartments();
+    res.json(apartments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/apartments/notify', async (req, res) => {
+  try {
+    const { apartment_id, phone } = req.body;
+    if (!apartment_id || !phone) {
+      return res.status(400).json({ error: 'Apartment ID and phone are required' });
+    }
+    const lead = await db.saveApartmentLead({ apartment_id, phone });
+    res.json({ success: true, message: 'We will WhatsApp you on launch day!', lead });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/products', async (req, res) => {
   try {
     const products = await db.getProducts();
@@ -431,11 +492,20 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/customers', async (req, res) => {
   try {
-    const { name, phone, apartment_name, block_wing, flat_number, referred_by } = req.body;
-    if (!name || !phone || !apartment_name || !flat_number) {
+    const { name, phone, apartment_id, apartment_name, apartment, block_wing, flat_number, referred_by } = req.body;
+    const aptName = apartment_name || apartment;
+    if (!name || !phone || (!apartment_id && !aptName) || !flat_number) {
       return res.status(400).json({ error: 'Name, phone, apartment, and flat number are required' });
     }
-    const customer = await db.createCustomer({ name, phone, apartment_name, block_wing, flat_number, referred_by });
+    const customer = await db.createCustomer({
+      name,
+      phone,
+      apartment_id,
+      apartment_name: aptName,
+      block_wing,
+      flat_number,
+      referred_by
+    });
     res.json(customer);
   } catch (err) {
     res.status(500).json({ error: err.message });

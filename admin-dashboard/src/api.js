@@ -166,3 +166,31 @@ export function createAlert(payload) {
 export function getAlerts() {
   return apiRequest('/api/admin/alerts');
 }
+
+// ---------------------------------------------------------------------------
+// 7. APARTMENTS MANAGEMENT
+// ---------------------------------------------------------------------------
+export function getAdminApartments() {
+  return apiRequest('/api/admin/apartments');
+}
+
+export function createApartment(payload) {
+  return apiRequest('/api/admin/apartments', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateApartment(id, payload) {
+  return apiRequest(`/api/admin/apartments/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteApartment(id) {
+  return apiRequest(`/api/admin/apartments/${id}`, {
+    method: 'DELETE'
+  });
+}
+

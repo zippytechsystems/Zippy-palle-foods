@@ -6,7 +6,8 @@ import {
   setLogoutHandler, 
   getRates, 
   getOrders, 
-  getSubscriptions 
+  getSubscriptions,
+  getAdminApartments
 } from './api';
 import { translations } from './translations';
 
@@ -38,6 +39,7 @@ export default function App() {
   const [rates, setRates] = useState([]);
   const [ordersData, setOrdersData] = useState(null);
   const [subsData, setSubsData] = useState(null);
+  const [apartments, setApartments] = useState([]);
   const [loadingInitial, setLoadingInitial] = useState(false);
 
   // Auto-refresh countdown state (60s)
@@ -65,14 +67,16 @@ export default function App() {
   const loadData = useCallback(async () => {
     if (!getToken()) return;
     try {
-      const [ratesRes, ordersRes, subsRes] = await Promise.all([
+      const [ratesRes, ordersRes, subsRes, aptsRes] = await Promise.all([
         getRates(),
         getOrders(),
-        getSubscriptions()
+        getSubscriptions(),
+        getAdminApartments().catch(() => [])
       ]);
       setRates(ratesRes);
       setOrdersData(ordersRes);
       setSubsData(subsRes);
+      setApartments(aptsRes || []);
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     }
@@ -227,7 +231,9 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // DASHBOARD MAIN SHELL
   // ---------------------------------------------------------------------------
-  const apartmentsList = Object.keys(ordersData?.by_apartment || {});
+  const apartmentsList = apartments.length 
+    ? apartments.map(a => a.name) 
+    : Object.keys(ordersData?.by_apartment || {});
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f5f3ef]">
@@ -288,6 +294,8 @@ export default function App() {
                   onOrderUpdated={loadData}
                   showToast={showToast}
                   lang={lang}
+                  apartments={apartments}
+                  onApartmentsUpdated={loadData}
                 />
               )}
 

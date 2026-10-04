@@ -40,6 +40,11 @@ export default function CartDrawer({
       return;
     }
 
+    if (!apartment || !apartment.name || (apartment.status && apartment.status !== 'active')) {
+      showToast('Please select an active delivery apartment in HMT Nagar', 'error');
+      return;
+    }
+
     if (cart.length === 0) {
       showToast('Your cart is empty', 'error');
       return;

@@ -34,12 +34,13 @@ export function getSelectedApartment() {
   try {
     const raw = localStorage.getItem('palle_selected_apartment');
     return raw ? JSON.parse(raw) : {
-      name: 'Raghavendra Nilayam',
+      id: 1,
+      name: 'Shneha Apartment',
       block: 'Block A',
-      flat: '204'
+      flat: '101'
     };
   } catch (e) {
-    return { name: 'Raghavendra Nilayam', block: 'Block A', flat: '204' };
+    return { id: 1, name: 'Shneha Apartment', block: 'Block A', flat: '101' };
   }
 }
 
@@ -123,3 +124,16 @@ export function createSubscription(payload) {
     body: JSON.stringify(payload)
   });
 }
+
+// 5. APARTMENTS & LAUNCH NOTIFICATIONS
+export function getApartments() {
+  return request('/api/apartments');
+}
+
+export function notifyApartmentLaunch(apartment_id, phone) {
+  return request('/api/apartments/notify', {
+    method: 'POST',
+    body: JSON.stringify({ apartment_id, phone })
+  });
+}
+
