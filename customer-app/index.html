@@ -1,196 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Mana Palle Fresh | Hyperlocal Village Food Delivery | HMT Nagar, Hyderabad</title>
-  
-  <!-- Web App Manifest for Android PWA Install -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#1b4d2e">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  
-  <!-- Modern Typography (Plus Jakarta Sans & Noto Sans Telugu) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
-  <link rel="stylesheet" href="css/app.css">
-</head>
-<body>
-
-  <!-- Mobile Device Simulator Container -->
-  <div class="device-container" id="deviceContainer">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Palle Natural Foods • Village Fresh Delivery</title>
+    <meta name="description" content="Hyperlocal unadulterated village milk, freshwater fish and pasture-fed mutton delivered fresh to your apartment flat door in HMT Nagar." />
     
-    <!-- Phone Notch & Speaker -->
-    <div class="device-top-notch">
-      <div class="notch-pill"></div>
-    </div>
+    <!-- PWA Settings -->
+    <meta name="theme-color" content="#1b4332" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Palle Foods" />
+    <link rel="apple-touch-icon" href="/assets/logo.jpg" />
+    <link rel="manifest" href="/manifest.json" />
 
-    <!-- App Header -->
-    <header class="app-header">
-      <div class="header-top-row">
-        <div class="brand-wrapper" onclick="window.manaStore.setRole('customer')">
-          <img src="assets/logo.jpg" alt="Mana Palle Fresh Logo" class="brand-logo-img">
-          <div class="brand-info">
-            <h1 class="brand-title">
-              <span id="headerBrandTitle">Mana Palle Fresh</span>
-              <span class="brand-badge">HMT NAGAR</span>
-            </h1>
-            <span class="brand-sub" id="headerTagline">Direct Farm-to-Door</span>
-          </div>
-        </div>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Ramabhadra&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/jpeg" href="/assets/logo.jpg">
+  </head>
+  <body class="bg-[#f5f3ef] text-[#222521] antialiased select-none">
+    <div id="root"></div>
 
-        <div class="header-actions">
-          <!-- Resident Login / Profile Button -->
-          <button class="btn-lang" id="btnLoginToggle" onclick="window.ManaCustomerUI.openLoginModal()" title="Resident Profile & OTP Login">
-            👤 <span id="loginBtnLabel">Profile</span>
-          </button>
-
-          <!-- Language Toggle Button -->
-          <button class="btn-lang" id="btnLangToggle" onclick="window.manaStore.toggleLanguage()" title="Switch Language">
-            🌐 <span id="langLabel">తెలుగు</span>
-          </button>
-          
-          <!-- Fullscreen / Responsive Frame Toggle -->
-          <button class="btn-viewport-toggle" id="btnViewportToggle" onclick="window.toggleViewportMode()" title="Toggle Fullscreen">
-            ⛶
-          </button>
-        </div>
-      </div>
-
-      <!-- Hyperlocal Apartment Address Bar -->
-      <div class="apartment-bar" onclick="window.ManaCustomerUI.openApartmentModal()">
-        <div class="apartment-address-txt">
-          <span>📍</span>
-          <span id="headerApartmentText">Raghavendra Nilayam, Flat 204 • HMT Nagar</span>
-        </div>
-        <span class="apartment-change-tag" id="changeAptTag">Change Flat</span>
-      </div>
-    </header>
-
-    <!-- Main Scrollable App Viewport -->
-    <main class="app-content" id="appContent">
-      <!-- Customer Store Feed -->
-    </main>
-
-    <!-- Subtle 'Z' Logo Edge Trigger for Owner/Staff Portal (Discreet, 24px, Low Opacity) -->
-    <button class="secret-z-trigger" id="secretZTrigger" onclick="window.ManaCustomerUI.openStaffGateModal()" title="Z" aria-label="Staff Portal">
-      Z
-    </button>
-
-    <!-- Floating Bottom Navigation Bar (Customer App) -->
-    <nav class="app-bottom-nav" id="bottomNav">
-      <button class="nav-item active" id="navHome" onclick="window.onNavClick('home')">
-        <span class="nav-icon">🌾</span>
-        <span class="nav-text" id="navHomeText">Fresh Store</span>
-      </button>
-      
-      <button class="nav-item" id="navMilk" onclick="window.onNavClick('milk')">
-        <span class="nav-icon">🥛</span>
-        <span class="nav-text" id="navMilkText">Daily Milk</span>
-      </button>
-
-      <button class="nav-item" id="navHistory" onclick="window.onNavClick('history')">
-        <span class="nav-icon">📜</span>
-        <span class="nav-text" id="navHistoryText">Past Orders</span>
-      </button>
-
-      <button class="nav-item" id="navCart" onclick="window.onNavClick('cart')">
-        <span class="nav-icon">🧺</span>
-        <span class="nav-badge" id="cartBadge" style="display:none;">0</span>
-        <span class="nav-text" id="navCartText">Basket</span>
-      </button>
-    </nav>
-
-  </div>
-
-  <!-- Scripts -->
-  <script src="js/translations.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/store.js"></script>
-  <script src="js/customer.js"></script>
-  <script src="js/admin.js"></script>
-  <script src="js/delivery.js"></script>
-
-  <script>
-    // App Bootstrap & Event Router
-    function renderApp(state) {
-      const isTe = state.lang === "te";
-      
-      // Update header labels
-      document.getElementById("headerBrandTitle").textContent = isTe ? "మన పల్లె ఫ్రెష్" : "Mana Palle Fresh";
-      document.getElementById("headerTagline").textContent = isTe ? "గ్రామాల నుండి నేరుగా మీ ఇంటికి" : "Village Direct Farm-to-Door";
-      document.getElementById("langLabel").textContent = isTe ? "English" : "తెలుగు";
-      document.getElementById("changeAptTag").textContent = window.manaStore.t("changeAddress");
-      
-      document.getElementById("headerApartmentText").textContent = 
-        `${state.user.apartmentName}, Flat ${state.user.flatNumber} • HMT Nagar`;
-
-      const loginBtn = document.getElementById("loginBtnLabel");
-      if (loginBtn) {
-        loginBtn.textContent = state.user?.name ? state.user.name.split(" ")[0] : (isTe ? "లాగిన్" : "Login");
-      }
-
-      // Update Bottom Navigation labels & badge
-      const totals = window.manaStore.getCartTotals();
-      const badge = document.getElementById("cartBadge");
-      if (totals.itemCount > 0) {
-        badge.style.display = "flex";
-        badge.textContent = totals.itemCount;
-      } else {
-        badge.style.display = "none";
-      }
-
-      document.getElementById("navHomeText").textContent = isTe ? "తాజా ఆహారం" : "Fresh Store";
-      document.getElementById("navMilkText").textContent = isTe ? "పాలు ప్లాన్" : "Daily Milk";
-      document.getElementById("navHistoryText").textContent = isTe ? "ఆర్డర్లు" : "Orders";
-      document.getElementById("navCartText").textContent = isTe ? "బుట్ట" : "Basket";
-
-      const appContent = document.getElementById("appContent");
-      window.ManaCustomerUI.renderHome(appContent);
-    }
-
-    // Bottom Navigation Router
-    window.onNavClick = function(target) {
-      document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
-      if (target === "home") {
-        document.getElementById("navHome").classList.add("active");
-        window.ManaCustomerUI.renderHome(document.getElementById("appContent"));
-      } else if (target === "milk") {
-        document.getElementById("navMilk").classList.add("active");
-        window.ManaCustomerUI.openSubscriptionModal();
-      } else if (target === "history") {
-        document.getElementById("navHistory").classList.add("active");
-        window.ManaCustomerUI.openOrderHistoryModal();
-      } else if (target === "cart") {
-        document.getElementById("navCart").classList.add("active");
-        window.ManaCustomerUI.openCartModal();
-      }
-    };
-
-    // Toggle Mobile Frame vs Full Screen Mode
-    window.toggleViewportMode = function() {
-      const container = document.getElementById("deviceContainer");
-      const isFullscreen = container.classList.toggle("fullscreen-mode");
-      document.getElementById("btnViewportToggle").textContent = isFullscreen ? "⛶" : "📱";
-    };
-
-    // Initialize Store Subscription
-    window.manaStore.subscribe(renderApp);
-
-    // Initial render
-    document.addEventListener("DOMContentLoaded", () => {
-      renderApp(window.manaStore.state);
-      
-      // Register service worker if available
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').catch(err => {
-          console.log("Service Worker register skipped in local preview:", err);
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.log('SW registration error:', err);
+          });
         });
       }
-    });
-  </script>
-</body>
+    </script>
+  </body>
 </html>

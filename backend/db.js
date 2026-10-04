@@ -1,35 +1,38 @@
-const { createClient } = require('@supabase/supabase-js');
+const mysql = require('mysql2/promise');
 
-// Configuration from environment variables
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Configuration from environment variables ONLY
+const DB_HOST = process.env.DB_HOST || 'localhost';
+const DB_PORT = parseInt(process.env.DB_PORT || '3306', 10);
+const DB_NAME = process.env.DB_NAME || 'palle_natural_foods';
+const DB_USER = process.env.DB_USER || 'root';
+const DB_PASSWORD = process.env.DB_PASSWORD || '';
 
-let supabase = null;
-const isSupabaseConfigured = Boolean(
-  SUPABASE_URL && 
-  SUPABASE_SERVICE_ROLE_KEY && 
-  !SUPABASE_URL.includes('your-project') &&
-  !SUPABASE_SERVICE_ROLE_KEY.includes('your-service-role-key')
-);
+let pool = null;
+let isMySQLConnected = false;
 
-if (isSupabaseConfigured) {
-  try {
-    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
+// Create MySQL Connection Pool
+try {
+  if (process.env.DB_NAME && process.env.DB_USER) {
+    pool = mysql.createPool({
+      host: DB_HOST,
+      port: DB_PORT,
+      database: DB_NAME,
+      user: DB_USER,
+      password: DB_PASSWORD,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      decimalNumbers: true, // Auto-parse DECIMAL as numbers
+      charset: 'utf8mb4'
     });
-    console.log('✅ Connected to Supabase PostgreSQL Database');
-  } catch (err) {
-    console.warn('⚠️ Could not initialize Supabase client:', err.message);
+    console.log(`📡 MySQL Connection Pool configured for ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}`);
   }
-} else {
-  console.log('ℹ️ Supabase credentials not set or placeholder. Running in-memory mock store for local development/testing.');
+} catch (err) {
+  console.warn('⚠️ Could not initialize MySQL pool:', err.message);
 }
 
 // ---------------------------------------------------------------------------
-// IN-MEMORY STORE (Pre-seeded with identical data from seed.sql for local dev)
+// IN-MEMORY FALLBACK (Used if MySQL connection is not configured during local dev)
 // Strictly 3 services: Morning Health Milk, Fresh Village Fish, Fresh Village Mutton
 // ---------------------------------------------------------------------------
 const memoryStore = {
@@ -108,12 +111,12 @@ const memoryStore = {
     { id: 4, product_id: 'prod-milk-morning', old_price: 85, new_price: 90, old_buy_price: 65, new_buy_price: 70, changed_at: new Date(Date.now() - 5 * 86400000).toISOString() }
   ],
   customers: [
-    { id: 'c0000001-0000-0000-0000-000000000001', name: 'Srinivas Rao', phone: '98490 12345', apartment_name: 'Raghavendra Nilayam', block_wing: 'Block A', flat_number: '204', created_at: new Date().toISOString() },
-    { id: 'c0000002-0000-0000-0000-000000000002', name: 'Vani Sharma', phone: '98490 23456', apartment_name: 'Raghavendra Nilayam', block_wing: 'Block B', flat_number: '302', created_at: new Date().toISOString() },
-    { id: 'c0000003-0000-0000-0000-000000000003', name: 'Rajesh Kumar', phone: '98490 34567', apartment_name: 'Aditya Enclave', block_wing: 'Wing 1', flat_number: '402', created_at: new Date().toISOString() },
-    { id: 'c0000004-0000-0000-0000-000000000004', name: 'Kavitha Reddy', phone: '98490 45678', apartment_name: 'Sri Sai Srinivas Residency', block_wing: 'Block B', flat_number: '105', created_at: new Date().toISOString() },
-    { id: 'c0000005-0000-0000-0000-000000000005', name: 'Venkat Ramana', phone: '98490 56789', apartment_name: 'Venkateshwara Towers', block_wing: 'Tower 1', flat_number: '501', created_at: new Date().toISOString() },
-    { id: 'c0000006-0000-0000-0000-000000000006', name: 'Lakshmi Prasanna', phone: '98490 67890', apartment_name: 'Kakatiya Heights', block_wing: 'North Wing', flat_number: '203', created_at: new Date().toISOString() }
+    { id: 'c0000001-0000-0000-0000-000000000001', name: 'Srinivas Rao', phone: '98490 12345', apartment_name: 'Raghavendra Nilayam', block_wing: 'Block A', flat_number: '204', referral_code: 'PALLE-SRI01', created_at: new Date().toISOString() },
+    { id: 'c0000002-0000-0000-0000-000000000002', name: 'Vani Sharma', phone: '98490 23456', apartment_name: 'Raghavendra Nilayam', block_wing: 'Block B', flat_number: '302', referral_code: 'PALLE-VAN02', created_at: new Date().toISOString() },
+    { id: 'c0000003-0000-0000-0000-000000000003', name: 'Rajesh Kumar', phone: '98490 34567', apartment_name: 'Aditya Enclave', block_wing: 'Wing 1', flat_number: '402', referral_code: 'PALLE-RAJ03', created_at: new Date().toISOString() },
+    { id: 'c0000004-0000-0000-0000-000000000004', name: 'Kavitha Reddy', phone: '98490 45678', apartment_name: 'Sri Sai Srinivas Residency', block_wing: 'Block B', flat_number: '105', referral_code: 'PALLE-KAV04', created_at: new Date().toISOString() },
+    { id: 'c0000005-0000-0000-0000-000000000005', name: 'Venkat Ramana', phone: '98490 56789', apartment_name: 'Venkateshwara Towers', block_wing: 'Tower 1', flat_number: '501', referral_code: 'PALLE-VEN05', created_at: new Date().toISOString() },
+    { id: 'c0000006-0000-0000-0000-000000000006', name: 'Lakshmi Prasanna', phone: '98490 67890', apartment_name: 'Kakatiya Heights', block_wing: 'North Wing', flat_number: '203', referral_code: 'PALLE-LAK06', created_at: new Date().toISOString() }
   ],
   orders: [
     {
@@ -286,40 +289,58 @@ const memoryStore = {
       recipients_count: 18,
       created_at: new Date(Date.now() - 2 * 86400000).toISOString()
     }
-  ]
+  ],
+  otp_codes: []
 };
 
+// Test MySQL connection availability
+async function testMySQL() {
+  if (!pool) return false;
+  try {
+    const [rows] = await pool.query('SELECT 1');
+    isMySQLConnected = true;
+    return true;
+  } catch (err) {
+    isMySQLConnected = false;
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
-// DB HELPER FUNCTIONS (PostgreSQL with Supabase & In-Memory Fallback)
+// DB HELPER FUNCTIONS (MySQL with In-Memory Dev Fallback)
 // ---------------------------------------------------------------------------
 
 // 1. PRODUCTS
 async function getProducts() {
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .in('category', ['milk', 'fish', 'mutton'])
-      .order('category', { ascending: true });
-    if (error) throw error;
-    return data;
+  if (await testMySQL()) {
+    const [rows] = await pool.query(
+      "SELECT id, name, category, unit, CAST(price AS DECIMAL(10,2)) AS price, CAST(buy_price AS DECIMAL(10,2)) AS buy_price, available, image_url, description FROM products WHERE category IN ('milk', 'fish', 'mutton') ORDER BY category ASC"
+    );
+    return rows.map(r => ({
+      ...r,
+      price: Number(r.price),
+      buy_price: Number(r.buy_price),
+      available: Boolean(r.available)
+    }));
   }
   return memoryStore.products;
 }
 
 // 2. RATES
 async function getRates() {
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('products')
-      .select('id, name, category, unit, price, buy_price, available')
-      .order('category', { ascending: true });
-    if (error) throw error;
-    return data.map(p => ({
-      ...p,
+  if (await testMySQL()) {
+    const [rows] = await pool.query(
+      'SELECT id, name, category, unit, price, buy_price, available FROM products ORDER BY category ASC'
+    );
+    return rows.map(p => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      unit: p.unit,
       price: Number(p.price),
       buy_price: Number(p.buy_price),
-      margin: Number((Number(p.price) - Number(p.buy_price)).toFixed(2))
+      margin: Number((Number(p.price) - Number(p.buy_price)).toFixed(2)),
+      available: Boolean(p.available)
     }));
   }
   return memoryStore.products.map(p => ({
@@ -335,47 +356,34 @@ async function getRates() {
 }
 
 async function updateRate(id, { price, buy_price, available }) {
-  if (supabase) {
-    // 1. Get old product details
-    const { data: current, error: getErr } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (getErr) throw getErr;
+  if (await testMySQL()) {
+    const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
+    if (!rows.length) throw new Error('Product not found');
+    const current = rows[0];
 
-    const updates = { updated_at: new Date().toISOString() };
-    if (price !== undefined) updates.price = Number(price);
-    if (buy_price !== undefined) updates.buy_price = Number(buy_price);
-    if (available !== undefined) updates.available = Boolean(available);
+    const newPrice = price !== undefined ? Number(price) : Number(current.price);
+    const newBuyPrice = buy_price !== undefined ? Number(buy_price) : Number(current.buy_price);
+    const newAvail = available !== undefined ? (available ? 1 : 0) : current.available;
 
-    const { data: updated, error: updErr } = await supabase
-      .from('products')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    if (updErr) throw updErr;
+    await pool.query(
+      'UPDATE products SET price = ?, buy_price = ?, available = ? WHERE id = ?',
+      [newPrice, newBuyPrice, newAvail, id]
+    );
 
-    // 2. Insert into rate_history if price or buy_price changed
-    if (
-      (price !== undefined && Number(price) !== Number(current.price)) ||
-      (buy_price !== undefined && Number(buy_price) !== Number(current.buy_price))
-    ) {
-      await supabase.from('rate_history').insert({
-        product_id: id,
-        old_price: current.price,
-        new_price: updates.price !== undefined ? updates.price : current.price,
-        old_buy_price: current.buy_price,
-        new_buy_price: updates.buy_price !== undefined ? updates.buy_price : current.buy_price
-      });
+    // Track rate history if price or buy_price changed
+    if (newPrice !== Number(current.price) || newBuyPrice !== Number(current.buy_price)) {
+      await pool.query(
+        'INSERT INTO rate_history (product_id, old_price, new_price, old_buy_price, new_buy_price) VALUES (?, ?, ?, ?, ?)',
+        [id, current.price, newPrice, current.buy_price, newBuyPrice]
+      );
     }
 
     return {
-      ...updated,
-      price: Number(updated.price),
-      buy_price: Number(updated.buy_price),
-      margin: Number((Number(updated.price) - Number(updated.buy_price)).toFixed(2))
+      ...current,
+      price: newPrice,
+      buy_price: newBuyPrice,
+      margin: Number((newPrice - newBuyPrice).toFixed(2)),
+      available: Boolean(newAvail)
     };
   }
 
@@ -408,14 +416,24 @@ async function updateRate(id, { price, buy_price, available }) {
 }
 
 async function getRateHistory(productId) {
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('rate_history')
-      .select('*')
-      .eq('product_id', productId)
-      .order('changed_at', { ascending: false });
-    if (error) throw error;
-    return data;
+  if (await testMySQL()) {
+    const [rows] = await pool.query(
+      'SELECT id, product_id, price_format(old_price) AS old_price, price_format(new_price) AS new_price, old_buy_price, new_buy_price, changed_at FROM rate_history WHERE product_id = ? ORDER BY changed_at DESC',
+      [productId]
+    ).catch(async () => {
+      const [r] = await pool.query(
+        'SELECT * FROM rate_history WHERE product_id = ? ORDER BY changed_at DESC',
+        [productId]
+      );
+      return [r];
+    });
+    return rows.map(r => ({
+      ...r,
+      old_price: Number(r.old_price),
+      new_price: Number(r.new_price),
+      old_buy_price: Number(r.old_buy_price),
+      new_buy_price: Number(r.new_buy_price)
+    }));
   }
   return memoryStore.rate_history
     .filter(h => h.product_id === productId)
@@ -437,34 +455,34 @@ async function getProcurement(dateStr) {
     };
   });
 
-  if (supabase) {
-    // A. Orders on targetDate (excluding cancelled)
-    const { data: orders, error: oErr } = await supabase
-      .from('orders')
-      .select('id, status, order_items(product_id, quantity, unit)')
-      .eq('delivery_date', targetDate)
-      .neq('status', 'cancelled');
-    if (oErr) throw oErr;
+  if (await testMySQL()) {
+    // 1. Orders on target date
+    const [orderItems] = await pool.query(
+      `SELECT oi.product_id, SUM(oi.quantity) AS total_qty
+       FROM order_items oi
+       JOIN orders o ON oi.order_id = o.id
+       WHERE o.delivery_date = ? AND o.status != 'cancelled'
+       GROUP BY oi.product_id`,
+      [targetDate]
+    );
 
-    orders.forEach(ord => {
-      (ord.order_items || []).forEach(item => {
-        if (prodMap[item.product_id]) {
-          prodMap[item.product_id].quantity += Number(item.quantity);
-        }
-      });
+    orderItems.forEach(item => {
+      if (prodMap[item.product_id]) {
+        prodMap[item.product_id].quantity += Number(item.total_qty);
+      }
     });
 
-    // B. Milk Subscriptions delivering on targetDate
-    const { data: subs, error: sErr } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('status', 'active');
-    if (sErr) throw sErr;
+    // 2. Active Milk Subscriptions delivering on target date
+    const [subs] = await pool.query(
+      `SELECT litres, frequency, start_date, paused_until
+       FROM subscriptions
+       WHERE status = 'active'`
+    );
 
     const targetTime = new Date(targetDate).getTime();
     subs.forEach(sub => {
       if (sub.paused_until && new Date(sub.paused_until).getTime() >= targetTime) {
-        return; // Currently paused
+        return; // Paused
       }
       let deliversToday = false;
       if (sub.frequency === 'daily') {
@@ -480,7 +498,7 @@ async function getProcurement(dateStr) {
       }
     });
   } else {
-    // Memory store calculation
+    // Memory store fallback
     memoryStore.orders
       .filter(o => o.delivery_date === targetDate && o.status !== 'cancelled')
       .forEach(o => {
@@ -541,46 +559,76 @@ async function getProcurement(dateStr) {
 async function getOrders({ status, apartment, date } = {}) {
   let ordersList = [];
 
-  if (supabase) {
-    let query = supabase
-      .from('orders')
-      .select('*, customers(name, phone), order_items(*)')
-      .order('created_at', { ascending: false });
+  if (await testMySQL()) {
+    let sql = `
+      SELECT o.*, c.name AS customer_name, c.phone AS customer_phone
+      FROM orders o
+      JOIN customers c ON o.customer_id = c.id
+      WHERE 1=1
+    `;
+    const params = [];
 
-    if (status && status !== 'all') query = query.eq('status', status);
-    if (apartment && apartment !== 'all') query = query.eq('apartment_name', apartment);
-    if (date) query = query.eq('delivery_date', date);
+    if (status && status !== 'all') {
+      sql += ' AND o.status = ?';
+      params.push(status);
+    }
+    if (apartment && apartment !== 'all') {
+      sql += ' AND o.apartment_name = ?';
+      params.push(apartment);
+    }
+    if (date) {
+      sql += ' AND o.delivery_date = ?';
+      params.push(date);
+    }
 
-    const { data, error } = await query;
-    if (error) throw error;
+    sql += ' ORDER BY o.created_at DESC';
 
-    ordersList = data.map(o => ({
-      id: o.id,
-      customer_id: o.customer_id,
-      customer_name: o.customers?.name || 'Customer',
-      customer_phone: o.customers?.phone || '',
-      apartment_name: o.apartment_name,
-      block_wing: o.block_wing,
-      flat_number: o.flat_number,
-      delivery_date: o.delivery_date,
-      delivery_slot: o.delivery_slot,
-      total_amount: Number(o.total_amount),
-      payment_method: o.payment_method,
-      paid: o.paid,
-      status: o.status,
-      notes: o.notes,
-      created_at: o.created_at,
-      items: (o.order_items || []).map(i => ({
-        id: i.id,
-        product_id: i.product_id,
-        name: i.name,
-        quantity: Number(i.quantity),
-        unit: i.unit,
-        price: Number(i.price),
-        total_price: Number(i.total_price),
-        cutting_instructions: i.cutting_instructions
-      }))
-    }));
+    const [rows] = await pool.query(sql, params);
+
+    // Fetch items for all fetched orders
+    if (rows.length > 0) {
+      const orderIds = rows.map(r => r.id);
+      const [items] = await pool.query(
+        'SELECT * FROM order_items WHERE order_id IN (?)',
+        [orderIds]
+      );
+
+      const itemsMap = {};
+      items.forEach(it => {
+        if (!itemsMap[it.order_id]) itemsMap[it.order_id] = [];
+        itemsMap[it.order_id].push({
+          id: it.id,
+          product_id: it.product_id,
+          name: it.name,
+          quantity: Number(it.quantity),
+          unit: it.unit,
+          price: Number(it.price),
+          total_price: Number(it.total_price),
+          cutting_instructions: it.cutting_instructions
+        });
+      });
+
+      ordersList = rows.map(r => ({
+        id: r.id,
+        customer_id: r.customer_id,
+        customer_name: r.customer_name,
+        customer_phone: r.customer_phone,
+        apartment_name: r.apartment_name,
+        block_wing: r.block_wing,
+        flat_number: r.flat_number,
+        delivery_date: r.delivery_date.toISOString ? r.delivery_date.toISOString().split('T')[0] : r.delivery_date,
+        delivery_slot: r.delivery_slot,
+        total_amount: Number(r.total_amount),
+        payment_method: r.payment_method,
+        paid: Boolean(r.paid),
+        status: r.status,
+        notes: r.notes,
+        rating: r.rating,
+        feedback: r.feedback,
+        created_at: r.created_at,
+        items: itemsMap[r.id] || []
+      }));
+    }
   } else {
     ordersList = memoryStore.orders.filter(o => {
       if (status && status !== 'all' && o.status !== status) return false;
@@ -611,25 +659,43 @@ async function getOrders({ status, apartment, date } = {}) {
   };
 }
 
-async function updateOrder(id, { status, paid }) {
-  if (supabase) {
-    const updates = {};
-    if (status !== undefined) updates.status = status;
-    if (paid !== undefined) updates.paid = Boolean(paid);
+async function updateOrder(id, { status, paid, rating, feedback }) {
+  if (await testMySQL()) {
+    const fields = [];
+    const params = [];
+    if (status !== undefined) {
+      fields.push('status = ?');
+      params.push(status);
+    }
+    if (paid !== undefined) {
+      fields.push('paid = ?');
+      params.push(paid ? 1 : 0);
+    }
+    if (rating !== undefined) {
+      fields.push('rating = ?');
+      params.push(Number(rating));
+    }
+    if (feedback !== undefined) {
+      fields.push('feedback = ?');
+      params.push(feedback);
+    }
 
-    const { data, error } = await supabase
-      .from('orders')
-      .update(updates)
-      .eq('id', id)
-      .select('*, customers(name, phone), order_items(*)')
-      .single();
-    if (error) throw error;
+    if (fields.length > 0) {
+      params.push(id);
+      await pool.query(`UPDATE orders SET ${fields.join(', ')} WHERE id = ?`, params);
+    }
 
+    const [rows] = await pool.query(
+      `SELECT o.*, c.name AS customer_name, c.phone AS customer_phone 
+       FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.id = ?`,
+      [id]
+    );
+    if (!rows.length) throw new Error('Order not found');
+    const ord = rows[0];
     return {
-      ...data,
-      total_amount: Number(data.total_amount),
-      customer_name: data.customers?.name,
-      customer_phone: data.customers?.phone
+      ...ord,
+      total_amount: Number(ord.total_amount),
+      paid: Boolean(ord.paid)
     };
   }
 
@@ -637,33 +703,39 @@ async function updateOrder(id, { status, paid }) {
   if (!ord) throw new Error('Order not found');
   if (status !== undefined) ord.status = status;
   if (paid !== undefined) ord.paid = Boolean(paid);
+  if (rating !== undefined) ord.rating = Number(rating);
+  if (feedback !== undefined) ord.feedback = feedback;
   return ord;
 }
 
 // 5. MILK SUBSCRIPTIONS
 async function getSubscriptions() {
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('*, customers(name, phone, apartment_name, block_wing, flat_number), products(name)')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
+  if (await testMySQL()) {
+    const [rows] = await pool.query(
+      `SELECT s.*, c.name AS customer_name, c.phone AS customer_phone,
+              c.apartment_name, c.block_wing, c.flat_number,
+              p.name AS product_name
+       FROM subscriptions s
+       JOIN customers c ON s.customer_id = c.id
+       JOIN products p ON s.product_id = p.id
+       ORDER BY s.created_at DESC`
+    );
 
-    const list = data.map(s => ({
+    const list = rows.map(s => ({
       id: s.id,
       customer_id: s.customer_id,
-      customer_name: s.customers?.name || 'Customer',
-      customer_phone: s.customers?.phone || '',
-      apartment_name: s.customers?.apartment_name || '',
-      block_wing: s.customers?.block_wing || '',
-      flat_number: s.customers?.flat_number || '',
+      customer_name: s.customer_name,
+      customer_phone: s.customer_phone,
+      apartment_name: s.apartment_name,
+      block_wing: s.block_wing,
+      flat_number: s.flat_number,
       product_id: s.product_id,
-      product_name: s.products?.name || 'Morning Health Milk',
+      product_name: s.product_name,
       litres: Number(s.litres),
       frequency: s.frequency,
       status: s.status,
-      paused_until: s.paused_until,
-      start_date: s.start_date,
+      paused_until: s.paused_until ? (s.paused_until.toISOString ? s.paused_until.toISOString().split('T')[0] : s.paused_until) : null,
+      start_date: s.start_date ? (s.start_date.toISOString ? s.start_date.toISOString().split('T')[0] : s.start_date) : null,
       created_at: s.created_at
     }));
 
@@ -693,35 +765,39 @@ async function getSubscriptions() {
 }
 
 async function updateSubscription(id, { action, until, litres }) {
-  if (supabase) {
-    const updates = {};
+  if (await testMySQL()) {
+    const fields = [];
+    const params = [];
+
     if (action === 'pause') {
-      updates.status = 'paused';
-      updates.paused_until = until || null;
+      fields.push("status = 'paused', paused_until = ?");
+      params.push(until || null);
     } else if (action === 'resume') {
-      updates.status = 'active';
-      updates.paused_until = null;
+      fields.push("status = 'active', paused_until = NULL");
     } else if (action === 'cancel') {
-      updates.status = 'cancelled';
+      fields.push("status = 'cancelled'");
     }
 
     if (litres !== undefined) {
-      updates.litres = Number(litres);
+      fields.push('litres = ?');
+      params.push(Number(litres));
     }
 
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .update(updates)
-      .eq('id', id)
-      .select('*, customers(name, phone, apartment_name, flat_number)')
-      .single();
-    if (error) throw error;
+    if (fields.length > 0) {
+      params.push(id);
+      await pool.query(`UPDATE subscriptions SET ${fields.join(', ')} WHERE id = ?`, params);
+    }
 
+    const [rows] = await pool.query(
+      `SELECT s.*, c.name AS customer_name, c.phone AS customer_phone 
+       FROM subscriptions s JOIN customers c ON s.customer_id = c.id WHERE s.id = ?`,
+      [id]
+    );
+    if (!rows.length) throw new Error('Subscription not found');
+    const sub = rows[0];
     return {
-      ...data,
-      litres: Number(data.litres),
-      customer_name: data.customers?.name,
-      customer_phone: data.customers?.phone
+      ...sub,
+      litres: Number(sub.litres)
     };
   }
 
@@ -757,14 +833,39 @@ async function getReports(period = 'daily') {
   });
 
   let orders = [];
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, order_items(*)')
-      .gte('delivery_date', cutoffDate)
-      .neq('status', 'cancelled');
-    if (error) throw error;
-    orders = data;
+  if (await testMySQL()) {
+    const [rows] = await pool.query(
+      `SELECT o.*, oi.product_id, oi.name AS item_name, oi.quantity, oi.unit, oi.price AS item_price, oi.total_price AS item_total
+       FROM orders o
+       LEFT JOIN order_items oi ON o.id = oi.order_id
+       WHERE o.delivery_date >= ? AND o.status != 'cancelled'`,
+      [cutoffDate]
+    );
+
+    // Group rows by order
+    const map = {};
+    rows.forEach(r => {
+      if (!map[r.id]) {
+        map[r.id] = {
+          id: r.id,
+          delivery_date: r.delivery_date.toISOString ? r.delivery_date.toISOString().split('T')[0] : r.delivery_date,
+          apartment_name: r.apartment_name,
+          total_amount: Number(r.total_amount),
+          items: []
+        };
+      }
+      if (r.product_id) {
+        map[r.id].items.push({
+          product_id: r.product_id,
+          name: r.item_name,
+          quantity: Number(r.quantity),
+          unit: r.unit,
+          price: Number(r.item_price),
+          total_price: Number(r.item_total)
+        });
+      }
+    });
+    orders = Object.values(map);
   } else {
     orders = memoryStore.orders.filter(o => o.delivery_date >= cutoffDate && o.status !== 'cancelled');
   }
@@ -775,7 +876,6 @@ async function getReports(period = 'daily') {
   const apartment_summary = {};
   const daily_summary = {};
 
-  // Initialize daily summary slots
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000).toISOString().split('T')[0];
     daily_summary[d] = { date: d, revenue: 0, orders: 0, profit: 0 };
@@ -785,14 +885,12 @@ async function getReports(period = 'daily') {
     const rev = Number(o.total_amount || 0);
     total_revenue += rev;
 
-    // Daily breakdown
     const d = o.delivery_date;
     if (daily_summary[d]) {
       daily_summary[d].revenue += rev;
       daily_summary[d].orders += 1;
     }
 
-    // Apartment breakdown
     const apt = o.apartment_name || 'Other';
     if (!apartment_summary[apt]) {
       apartment_summary[apt] = { apartment_name: apt, orders: 0, revenue: 0 };
@@ -800,8 +898,7 @@ async function getReports(period = 'daily') {
     apartment_summary[apt].orders += 1;
     apartment_summary[apt].revenue += rev;
 
-    // Product breakdown
-    (o.order_items || o.items || []).forEach(item => {
+    (o.items || []).forEach(item => {
       const pid = item.product_id;
       const meta = prodCostMap[pid] || { name: item.name, category: 'other', buy_price: 0 };
       const itemRev = Number(item.total_price || (item.quantity * item.price));
@@ -851,34 +948,37 @@ async function getReports(period = 'daily') {
 async function getCustomers(queryStr = '') {
   const q = (queryStr || '').toLowerCase().trim();
 
-  if (supabase) {
-    let query = supabase
-      .from('customers')
-      .select('*, orders(id, total_amount), subscriptions(id, status)')
-      .order('created_at', { ascending: false });
-
+  if (await testMySQL()) {
+    let sql = `
+      SELECT c.*, 
+             COUNT(DISTINCT o.id) AS orders_count,
+             COALESCE(SUM(o.total_amount), 0) AS total_spent,
+             EXISTS(SELECT 1 FROM subscriptions s WHERE s.customer_id = c.id AND s.status = 'active') AS has_active_milk
+      FROM customers c
+      LEFT JOIN orders o ON c.id = o.customer_id
+      WHERE 1=1
+    `;
+    const params = [];
     if (q) {
-      query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%,apartment_name.ilike.%${q}%`);
+      sql += ' AND (LOWER(c.name) LIKE ? OR c.phone LIKE ? OR LOWER(c.apartment_name) LIKE ?)';
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
+    sql += ' GROUP BY c.id ORDER BY c.created_at DESC';
 
-    const { data, error } = await query;
-    if (error) throw error;
-
-    return data.map(c => {
-      const total_spent = (c.orders || []).reduce((acc, o) => acc + Number(o.total_amount), 0);
-      return {
-        id: c.id,
-        name: c.name,
-        phone: c.phone,
-        apartment_name: c.apartment_name,
-        block_wing: c.block_wing,
-        flat_number: c.flat_number,
-        orders_count: (c.orders || []).length,
-        total_spent: Number(total_spent.toFixed(2)),
-        has_active_milk: (c.subscriptions || []).some(s => s.status === 'active'),
-        created_at: c.created_at
-      };
-    });
+    const [rows] = await pool.query(sql, params);
+    return rows.map(c => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      apartment_name: c.apartment_name,
+      block_wing: c.block_wing,
+      flat_number: c.flat_number,
+      referral_code: c.referral_code,
+      orders_count: Number(c.orders_count),
+      total_spent: Number(Number(c.total_spent).toFixed(2)),
+      has_active_milk: Boolean(c.has_active_milk),
+      created_at: c.created_at
+    }));
   }
 
   return memoryStore.customers
@@ -904,29 +1004,32 @@ async function getCustomers(queryStr = '') {
 }
 
 async function getCustomerById(id) {
-  if (supabase) {
-    const { data: customer, error: cErr } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (cErr) throw cErr;
+  if (await testMySQL()) {
+    const [custs] = await pool.query('SELECT * FROM customers WHERE id = ?', [id]);
+    if (!custs.length) throw new Error('Customer not found');
+    const customer = custs[0];
 
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('*, order_items(*)')
-      .eq('customer_id', id)
-      .order('created_at', { ascending: false });
+    const [orders] = await pool.query(
+      'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
+      [id]
+    );
 
-    const { data: subs } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('customer_id', id);
+    const [subs] = await pool.query(
+      'SELECT * FROM subscriptions WHERE customer_id = ? ORDER BY created_at DESC',
+      [id]
+    );
 
     return {
       ...customer,
-      orders: orders || [],
-      subscriptions: subs || []
+      orders: orders.map(o => ({
+        ...o,
+        total_amount: Number(o.total_amount),
+        delivery_date: o.delivery_date.toISOString ? o.delivery_date.toISOString().split('T')[0] : o.delivery_date
+      })),
+      subscriptions: subs.map(s => ({
+        ...s,
+        litres: Number(s.litres)
+      }))
     };
   }
 
@@ -943,18 +1046,33 @@ async function getCustomerById(id) {
   };
 }
 
-async function createCustomer({ name, phone, apartment_name, block_wing, flat_number }) {
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('customers')
-      .upsert(
-        { name, phone, apartment_name, block_wing, flat_number },
-        { onConflict: 'phone' }
-      )
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+async function getCustomerByPhone(phone) {
+  const clean = (phone || '').replace(/[^0-9]/g, '');
+  if (await testMySQL()) {
+    const [rows] = await pool.query('SELECT * FROM customers WHERE phone LIKE ?', [`%${clean.slice(-10)}`]);
+    return rows[0] || null;
+  }
+  return memoryStore.customers.find(c => c.phone.replace(/[^0-9]/g, '').endsWith(clean.slice(-10))) || null;
+}
+
+async function createCustomer({ name, phone, apartment_name, block_wing = 'A', flat_number, referred_by = null }) {
+  const customerId = `c-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+  const referral_code = `PALLE-${name.substring(0, 3).toUpperCase()}${Math.floor(10 + Math.random() * 90)}`;
+
+  if (await testMySQL()) {
+    await pool.query(
+      `INSERT INTO customers (id, name, phone, apartment_name, block_wing, flat_number, referral_code, referred_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+         name = VALUES(name),
+         apartment_name = VALUES(apartment_name),
+         block_wing = VALUES(block_wing),
+         flat_number = VALUES(flat_number)`,
+      [customerId, name, phone, apartment_name, block_wing, flat_number, referral_code, referred_by]
+    );
+
+    const [rows] = await pool.query('SELECT * FROM customers WHERE phone = ?', [phone]);
+    return rows[0];
   }
 
   let cust = memoryStore.customers.find(c => c.phone === phone);
@@ -967,75 +1085,81 @@ async function createCustomer({ name, phone, apartment_name, block_wing, flat_nu
   }
 
   cust = {
-    id: `c000000${memoryStore.customers.length + 1}-0000-0000-0000-000000000000`,
+    id: customerId,
     name,
     phone,
     apartment_name,
     block_wing,
     flat_number,
+    referral_code,
+    referred_by,
     created_at: new Date().toISOString()
   };
   memoryStore.customers.push(cust);
   return cust;
 }
 
-// 8. ORDERS CREATION
+// 8. ORDERS (WITH MYSQL TRANSACTION)
 async function createOrder({
   customer_id,
   customer_name,
   customer_phone,
   apartment_name,
-  block_wing,
+  block_wing = 'A',
   flat_number,
   delivery_date,
-  delivery_slot,
-  items,
+  delivery_slot = 'morning',
+  items = [],
   payment_method = 'cod',
   notes = ''
 }) {
   const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
-  const total_amount = items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
+  const total_amount = items.reduce((acc, item) => acc + (Number(item.quantity) * Number(item.price)), 0);
+  const delDate = delivery_date || new Date().toISOString().split('T')[0];
 
-  if (supabase) {
-    const { data: ord, error: oErr } = await supabase
-      .from('orders')
-      .insert({
+  if (await testMySQL()) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query(
+        `INSERT INTO orders (id, customer_id, apartment_name, block_wing, flat_number, delivery_date, delivery_slot, total_amount, payment_method, paid, status, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'placed', ?)`,
+        [orderId, customer_id, apartment_name, block_wing, flat_number, delDate, delivery_slot, total_amount, payment_method, notes]
+      );
+
+      for (const item of items) {
+        const itemTotal = Number((Number(item.quantity) * Number(item.price)).toFixed(2));
+        await conn.query(
+          `INSERT INTO order_items (order_id, product_id, name, quantity, unit, price, total_price, cutting_instructions)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [orderId, item.product_id, item.name, Number(item.quantity), item.unit || 'kg', Number(item.price), itemTotal, item.cutting_instructions || '']
+        );
+      }
+
+      await conn.commit();
+
+      return {
         id: orderId,
         customer_id,
         apartment_name,
         block_wing,
         flat_number,
-        delivery_date: delivery_date || new Date().toISOString().split('T')[0],
-        delivery_slot: delivery_slot || 'morning',
-        total_amount,
+        delivery_date: delDate,
+        delivery_slot,
+        total_amount: Number(total_amount.toFixed(2)),
         payment_method,
         paid: false,
         status: 'placed',
-        notes
-      })
-      .select()
-      .single();
-    if (oErr) throw oErr;
-
-    const orderItems = items.map(item => ({
-      order_id: orderId,
-      product_id: item.product_id,
-      name: item.name,
-      quantity: item.quantity,
-      unit: item.unit || 'kg',
-      price: item.price,
-      total_price: Number((item.quantity * item.price).toFixed(2)),
-      cutting_instructions: item.cutting_instructions || ''
-    }));
-
-    const { error: iErr } = await supabase.from('order_items').insert(orderItems);
-    if (iErr) throw iErr;
-
-    return {
-      ...ord,
-      total_amount: Number(ord.total_amount),
-      items: orderItems
-    };
+        notes,
+        items
+      };
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
   }
 
   const newOrder = {
@@ -1046,8 +1170,8 @@ async function createOrder({
     apartment_name,
     block_wing,
     flat_number,
-    delivery_date: delivery_date || new Date().toISOString().split('T')[0],
-    delivery_slot: delivery_slot || 'morning',
+    delivery_date: delDate,
+    delivery_slot,
     total_amount: Number(total_amount.toFixed(2)),
     payment_method,
     paid: false,
@@ -1075,22 +1199,23 @@ async function createSubscription({ customer_id, litres = 1.0, frequency = 'dail
   const subId = `SUB-${Math.floor(200 + Math.random() * 800)}`;
   const startDate = new Date().toISOString().split('T')[0];
 
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .insert({
-        id: subId,
-        customer_id,
-        product_id: 'prod-milk-morning',
-        litres: Number(litres),
-        frequency,
-        status: 'active',
-        start_date: startDate
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+  if (await testMySQL()) {
+    await pool.query(
+      `INSERT INTO subscriptions (id, customer_id, product_id, litres, frequency, status, start_date)
+       VALUES (?, ?, 'prod-milk-morning', ?, ?, 'active', ?)`,
+      [subId, customer_id, Number(litres), frequency, startDate]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT s.*, p.name AS product_name 
+       FROM subscriptions s JOIN products p ON s.product_id = p.id WHERE s.id = ?`,
+      [subId]
+    );
+    const sub = rows[0];
+    return {
+      ...sub,
+      litres: Number(sub.litres)
+    };
   }
 
   const cust = memoryStore.customers.find(c => c.id === customer_id);
@@ -1120,17 +1245,19 @@ async function createSubscription({ customer_id, litres = 1.0, frequency = 'dail
 async function createAlert({ title, message, audience = 'all' }) {
   let targetCustomers = [];
 
-  if (supabase) {
-    let q = supabase.from('customers').select('*');
+  if (await testMySQL()) {
+    let sql = 'SELECT * FROM customers';
+    const params = [];
     if (audience !== 'all' && audience !== 'milk_subscribers') {
-      q = q.eq('apartment_name', audience);
+      sql += ' WHERE apartment_name = ?';
+      params.push(audience);
     }
-    const { data: custs } = await q;
+    const [custs] = await pool.query(sql, params);
     targetCustomers = custs || [];
 
     if (audience === 'milk_subscribers') {
-      const { data: subs } = await supabase.from('subscriptions').select('customer_id').eq('status', 'active');
-      const activeIds = new Set((subs || []).map(s => s.customer_id));
+      const [subs] = await pool.query("SELECT DISTINCT customer_id FROM subscriptions WHERE status = 'active'");
+      const activeIds = new Set(subs.map(s => s.customer_id));
       targetCustomers = targetCustomers.filter(c => activeIds.has(c.id));
     }
   } else {
@@ -1154,29 +1281,21 @@ async function createAlert({ title, message, audience = 'all' }) {
     created_at: new Date().toISOString()
   };
 
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('alerts')
-      .insert({
-        title,
-        message,
-        audience,
-        recipients_count
-      })
-      .select()
-      .single();
-    if (!error && data) {
-      alertRecord = data;
-    }
+  if (await testMySQL()) {
+    const [res] = await pool.query(
+      'INSERT INTO alerts (title, message, audience, recipients_count) VALUES (?, ?, ?, ?)',
+      [title, message, audience, recipients_count]
+    );
+    alertRecord.id = res.insertId;
   } else {
     memoryStore.alerts.unshift(alertRecord);
   }
 
-  // Generate WhatsApp wa.me personalized links for each customer
+  // Generate personalized WhatsApp links
   const links = targetCustomers.map(c => {
     const cleanPhone = (c.phone || '').replace(/[^0-9]/g, '');
     const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const personalizedText = `Namaste ${c.name} garu! 🙏\n\n*${title}*\n\n${message}\n\n- Mana Palle Fresh (HMT Nagar)`;
+    const personalizedText = `Namaste ${c.name} garu! 🙏\n\n*Palle Natural Foods (HMT Nagar)*\n*${title}*\n\n${message}\n\nFresh village produce at your flat doorstep.`;
     const wa_link = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(personalizedText)}`;
 
     return {
@@ -1196,19 +1315,48 @@ async function createAlert({ title, message, audience = 'all' }) {
 }
 
 async function getAlerts() {
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('alerts')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data;
+  if (await testMySQL()) {
+    const [rows] = await pool.query('SELECT * FROM alerts ORDER BY created_at DESC');
+    return rows;
   }
   return memoryStore.alerts;
 }
 
+// 11. OTP VERIFICATION
+async function saveOtp(phone, otpHash, expiresAt) {
+  if (await testMySQL()) {
+    await pool.query(
+      'INSERT INTO otp_codes (phone, otp_hash, attempts, expires_at) VALUES (?, ?, 0, ?)',
+      [phone, otpHash, expiresAt]
+    );
+    return true;
+  }
+  memoryStore.otp_codes.push({ phone, otp_hash: otpHash, attempts: 0, expires_at: expiresAt });
+  return true;
+}
+
+async function getLatestOtp(phone) {
+  if (await testMySQL()) {
+    const [rows] = await pool.query(
+      'SELECT * FROM otp_codes WHERE phone = ? ORDER BY id DESC LIMIT 1',
+      [phone]
+    );
+    return rows[0] || null;
+  }
+  return memoryStore.otp_codes.filter(o => o.phone === phone).slice(-1)[0] || null;
+}
+
+async function incrementOtpAttempts(id) {
+  if (await testMySQL()) {
+    await pool.query('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = ?', [id]);
+    return;
+  }
+  const code = memoryStore.otp_codes.find(o => o.id === id);
+  if (code) code.attempts += 1;
+}
+
 module.exports = {
-  isSupabaseConfigured,
+  isMySQLConnected,
   getProducts,
   getRates,
   updateRate,
@@ -1221,9 +1369,13 @@ module.exports = {
   getReports,
   getCustomers,
   getCustomerById,
+  getCustomerByPhone,
   createCustomer,
   createOrder,
   createSubscription,
   createAlert,
-  getAlerts
+  getAlerts,
+  saveOtp,
+  getLatestOtp,
+  incrementOtpAttempts
 };

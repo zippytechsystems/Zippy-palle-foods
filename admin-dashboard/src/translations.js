@@ -2,7 +2,8 @@
 
 export const translations = {
   en: {
-    appTitle: 'Mana Palle Fresh',
+    appTitle: 'Palle Natural Foods',
+    adminHeader: 'Palle Natural Foods - Admin',
     subTitle: 'HMT Nagar Hyperlocal Operations',
     slogan: 'Morning Health Milk • Fresh Village Fish • Fresh Village Mutton',
     sections: {
@@ -15,7 +16,7 @@ export const translations = {
       procurement: '🛒 Daily Buying List'
     },
     login: {
-      title: 'Admin Access',
+      title: 'Palle Natural Foods - Admin Login',
       prompt: 'Enter credentials to manage HMT Nagar delivery hub',
       username: 'Username',
       password: 'Password',
@@ -136,7 +137,8 @@ export const translations = {
     }
   },
   te: {
-    appTitle: 'మన పల్లె ఫ్రెష్',
+    appTitle: 'పల్లె నేచురల్ ఫుడ్స్',
+    adminHeader: 'పల్లె నేచురల్ ఫుడ్స్ - అడ్మిన్',
     subTitle: 'హెచ్‌ఎంటీ నగర్ విలేజ్ డెలివరీ సెంటర్',
     slogan: 'ఉదయపు తాజా పాలు • పల్లె చెరువు చేపలు • పల్లెటూరి నాటు మటన్',
     sections: {

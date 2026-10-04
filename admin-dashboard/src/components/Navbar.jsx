@@ -14,10 +14,7 @@ export default function Navbar({ lang, setLang, countdown, onRefresh, onLogout, 
         </div>
         <div>
           <div className="flex items-center space-x-2">
-            <h1 className="font-bold text-lg md:text-xl tracking-tight text-white">{t.appTitle}</h1>
-            <span className="bg-[#2d6a4f] text-[#a7f3d0] text-xs font-semibold px-2 py-0.5 rounded-full border border-[#40916c]/50">
-              Admin
-            </span>
+            <h1 className="font-bold text-lg md:text-xl tracking-tight text-white">{t.adminHeader || "Palle Natural Foods - Admin"}</h1>
           </div>
           <p className="text-xs text-[#a3b899] font-medium hidden sm:block">
             {t.subTitle} • HMT Nagar

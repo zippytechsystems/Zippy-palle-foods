@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-deep: #1b4332;
+  --primary-forest: #2d6a4f;
+  --primary-medium: #40916c;
+  --primary-light: #52b788;
+  --primary-pale: #e8f5e9;
+  --earth-sand: #f5f3ef;
+  --earth-border: #e6e2d8;
+  --earth-text: #222521;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #ede9e1;
+  color: #222521;
+  min-height: 100vh;
+}
+
+/* App container constrained on desktop to look like mobile phone */
+.mobile-app-shell {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: #f7f5f0;
+  position: relative;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Bottom Safe Spacing for Floating Nav */
+.content-padding-bottom {
+  padding-bottom: 96px;
+}
+
+/* Discreet 24px 'Z' Admin Trigger Logo */
+.secret-z-trigger {
+  position: fixed;
+  right: 6px;
+  bottom: 84px;
+  width: 24px;
+  height: 24px;
+  opacity: 0.18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1b4332;
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  font-family: sans-serif;
+  text-decoration: none;
+  z-index: 40;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.secret-z-trigger:hover {
+  opacity: 0.95;
+  transform: scale(1.12);
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.slide-up-modal {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}

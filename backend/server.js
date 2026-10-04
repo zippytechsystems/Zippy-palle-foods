@@ -5,19 +5,47 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const TOKEN_SECRET = process.env.TOKEN_SECRET || 'zfresh-super-secret-jwt-key-2025';
+const TOKEN_SECRET = process.env.TOKEN_SECRET || 'palle-natural-foods-secret-jwt-key-2025';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'zfresh2025';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'PalleNatural2025!';
 
-// Pre-compute hash for env password if not already bcrypt hashed
+// Security Check: Warn if admin password is under 12 characters
+if (ADMIN_PASSWORD.length < 12) {
+  console.warn('⚠️ SECURITY WARNING: ADMIN_PASSWORD is under 12 characters. Use a 12+ character pass in production.');
+}
+
+// Pre-compute hash for env password
 let adminPasswordHash = ADMIN_PASSWORD.startsWith('$2') 
   ? ADMIN_PASSWORD 
   : bcrypt.hashSync(ADMIN_PASSWORD, 10);
+
+// Constant-time password check
+function verifyAdminPassword(inputPassword, storedHash) {
+  try {
+    return bcrypt.compareSync(inputPassword, storedHash);
+  } catch (err) {
+    return false;
+  }
+}
+
+// Constant-time string comparator
+function safeCompare(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Perform dummy comparison to protect against timing attacks
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 // Security Middlewares
 app.use(helmet({
@@ -37,15 +65,31 @@ app.use(cors({
 
 app.use(express.json());
 
-// Rate Limiter for Login (Max 5 attempts per 15 mins)
+// Rate Limiters
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   message: {
-    error: 'Too many login attempts from this IP. Please try again after 15 minutes.'
+    error: 'Too many login attempts. Please try again after 15 minutes.'
   },
   standardHeaders: true,
   legacyHeaders: false
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  message: {
+    error: 'Too many OTP requests from this connection. Please try again in 10 minutes.'
+  }
+});
+
+const otpVerifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: {
+    error: 'Too many OTP verification attempts. Please request a new OTP.'
+  }
 });
 
 // Admin JWT Authentication Middleware
@@ -62,6 +106,9 @@ function authenticateAdmin(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, TOKEN_SECRET);
+    if (decoded.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+    }
     req.admin = decoded;
     next();
   } catch (err) {
@@ -75,11 +122,123 @@ function authenticateAdmin(req, res, next) {
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    service: 'Mana Palle Fresh (ZFresh) Backend',
+    brand: 'Palle Natural Foods',
+    service: 'Hyperlocal Village Delivery API (HMT Nagar, Hyderabad)',
     uptime: Math.floor(process.uptime()),
-    database: db.isSupabaseConfigured ? 'supabase_postgres' : 'memory_store_dev',
+    database: process.env.DB_NAME ? 'hostinger_mysql' : 'memory_store_dev',
     timestamp: new Date().toISOString()
   });
+});
+
+// ============================================================================
+// CUSTOMER MOBILE OTP AUTHENTICATION
+// ============================================================================
+
+// Pluggable SMS Gateway Interface
+async function sendSmsOtp(phone, otp) {
+  // DEV / CONSOLE PROVIDER (Active)
+  console.log(`\n======================================================`);
+  console.log(`📲 [Palle Natural Foods SMS Provider - Console]`);
+  console.log(`To: +91 ${phone}`);
+  console.log(`Message: Your Palle Natural Foods login OTP is: ${otp}. Valid for 5 minutes.`);
+  console.log(`======================================================\n`);
+
+  // PLUG IN YOUR LIVE SMS GATEWAY (e.g. MSG91, Fast2SMS, Twilio) HERE:
+  /*
+  if (process.env.MSG91_AUTH_KEY) {
+    // await sendMsg91Otp(phone, otp);
+  } else if (process.env.TWILIO_ACCOUNT_SID) {
+    // await sendTwilioSms(phone, otp);
+  }
+  */
+  return true;
+}
+
+app.post('/api/auth/send-otp', otpLimiter, async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: 'Valid 10-digit mobile number required' });
+    }
+
+    const cleanPhone = phone.replace(/[^0-9]/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit Indian phone number' });
+    }
+
+    // Generate 6-digit cryptographically random OTP
+    const otp = Math.floor(100000 + crypto.randomInt(900000)).toString();
+    const otpHash = bcrypt.hashSync(otp, 8);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+    await db.saveOtp(cleanPhone, otpHash, expiresAt);
+    await sendSmsOtp(cleanPhone, otp);
+
+    const isDev = process.env.NODE_ENV !== 'production' || !process.env.DB_NAME;
+
+    res.json({
+      success: true,
+      message: `OTP sent successfully to +91 ${cleanPhone}`,
+      expires_in: 300,
+      ...(isDev ? { devOtp: otp } : {})
+    });
+  } catch (err) {
+    console.error('OTP send error:', err);
+    res.status(500).json({ error: 'Failed to dispatch OTP. Please try again.' });
+  }
+});
+
+app.post('/api/auth/verify-otp', otpVerifyLimiter, async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
+    if (!phone || !otp) {
+      return res.status(400).json({ error: 'Phone and 6-digit OTP are required' });
+    }
+
+    const cleanPhone = phone.replace(/[^0-9]/g, '').slice(-10);
+    const record = await db.getLatestOtp(cleanPhone);
+
+    if (!record) {
+      return res.status(400).json({ error: 'No active OTP found. Please request a new one.' });
+    }
+
+    // Check expiry
+    const expiry = new Date(record.expires_at).getTime();
+    if (Date.now() > expiry) {
+      return res.status(400).json({ error: 'OTP has expired. Please request a fresh code.' });
+    }
+
+    // Check attempts limit (max 3)
+    if (record.attempts >= 3) {
+      return res.status(400).json({ error: 'Max verification attempts exceeded. Request a new OTP.' });
+    }
+
+    // Verify hash
+    const isValid = bcrypt.compareSync(otp.toString(), record.otp_hash);
+    if (!isValid) {
+      await db.incrementOtpAttempts(record.id);
+      return res.status(400).json({ error: 'Invalid OTP. Please check and re-enter.' });
+    }
+
+    // Check if customer exists in HMT Nagar directory
+    const existing = await db.getCustomerByPhone(cleanPhone);
+
+    const token = jwt.sign(
+      { phone: cleanPhone, customerId: existing?.id, role: 'customer' },
+      TOKEN_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      isRegistered: Boolean(existing),
+      customer: existing || { phone: cleanPhone }
+    });
+  } catch (err) {
+    console.error('OTP verify error:', err);
+    res.status(500).json({ error: 'OTP verification failed' });
+  }
 });
 
 // ============================================================================
@@ -92,11 +251,11 @@ app.post('/api/admin/login', loginLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    if (username !== ADMIN_USER) {
+    if (!safeCompare(username, ADMIN_USER)) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    const isValid = bcrypt.compareSync(password, adminPasswordHash);
+    const isValid = verifyAdminPassword(password, adminPasswordHash);
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
@@ -111,6 +270,7 @@ app.post('/api/admin/login', loginLimiter, async (req, res) => {
       token,
       user: {
         username: ADMIN_USER,
+        brand: 'Palle Natural Foods',
         role: 'admin'
       }
     });
@@ -176,8 +336,8 @@ app.get('/api/admin/orders', authenticateAdmin, async (req, res) => {
 
 app.patch('/api/admin/orders/:id', authenticateAdmin, async (req, res) => {
   try {
-    const { status, paid } = req.body;
-    const updated = await db.updateOrder(req.params.id, { status, paid });
+    const { status, paid, rating, feedback } = req.body;
+    const updated = await db.updateOrder(req.params.id, { status, paid, rating, feedback });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -258,7 +418,7 @@ app.get('/api/admin/alerts', authenticateAdmin, async (req, res) => {
 });
 
 // ============================================================================
-// CUSTOMER APIS (Public)
+// CUSTOMER APIS (Public / Protected)
 // ============================================================================
 app.get('/api/products', async (req, res) => {
   try {
@@ -271,11 +431,11 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/customers', async (req, res) => {
   try {
-    const { name, phone, apartment_name, block_wing, flat_number } = req.body;
+    const { name, phone, apartment_name, block_wing, flat_number, referred_by } = req.body;
     if (!name || !phone || !apartment_name || !flat_number) {
       return res.status(400).json({ error: 'Name, phone, apartment, and flat number are required' });
     }
-    const customer = await db.createCustomer({ name, phone, apartment_name, block_wing, flat_number });
+    const customer = await db.createCustomer({ name, phone, apartment_name, block_wing, flat_number, referred_by });
     res.json(customer);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -284,10 +444,24 @@ app.post('/api/customers', async (req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   try {
-    const { customer_id, customer_name, customer_phone, apartment_name, block_wing, flat_number, delivery_date, delivery_slot, items, payment_method, notes } = req.body;
+    const {
+      customer_id,
+      customer_name,
+      customer_phone,
+      apartment_name,
+      block_wing,
+      flat_number,
+      delivery_date,
+      delivery_slot,
+      items,
+      payment_method,
+      notes
+    } = req.body;
+
     if (!customer_id || !items || !items.length) {
       return res.status(400).json({ error: 'Customer ID and at least one item are required' });
     }
+
     const order = await db.createOrder({
       customer_id,
       customer_name,
@@ -331,6 +505,6 @@ app.get('/api/customers/:id/orders', async (req, res) => {
 
 // Start Server
 app.listen(PORT, () => {
-  console.log(`🚀 ZFresh Production Backend running on port ${PORT}`);
+  console.log(`🚀 Palle Natural Foods Backend running on port ${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
 });
