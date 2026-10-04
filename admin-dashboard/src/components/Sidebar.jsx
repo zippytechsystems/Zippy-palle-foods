@@ -1,4 +1,3 @@
-import React from 'react';
 import { 
   TrendingUp, 
   Building2, 
@@ -6,11 +5,12 @@ import {
   BarChart3, 
   Users, 
   Send, 
-  ClipboardList 
+  ClipboardList,
+  LogOut 
 } from 'lucide-react';
 import { translations } from '../translations';
 
-export default function Sidebar({ activeSection, setActiveSection, lang, ordersCount, subsCount }) {
+export default function Sidebar({ activeSection, setActiveSection, lang, ordersCount, subsCount, onLogout }) {
   const t = translations[lang];
 
   const menuItems = [
@@ -95,6 +95,19 @@ export default function Sidebar({ activeSection, setActiveSection, lang, ordersC
             );
           })}
         </nav>
+
+        {/* Logout Button in Sidebar */}
+        {onLogout && (
+          <div className="pt-2 mt-2 border-t border-[#2d6a4f]/50">
+            <button
+              onClick={onLogout}
+              className="flex items-center space-x-2.5 w-full px-3 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-red-200 hover:bg-red-900/40 hover:text-white transition"
+            >
+              <LogOut className="w-4 h-4 text-red-300" />
+              <span>{t.common?.logout || 'Logout'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Village Sourcing Footer Notice */}

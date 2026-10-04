@@ -183,8 +183,8 @@ export function getCustomerOrders(customerId) {
 }
 
 export function rateOrder(orderId, rating, feedback) {
-  return request(`/api/admin/orders/${orderId}`, {
-    method: 'PATCH',
+  return request(`/api/customer/orders/${orderId}/rate`, {
+    method: 'POST',
     body: JSON.stringify({ rating, feedback })
   });
 }

@@ -3,6 +3,8 @@ import {
   login, 
   logout, 
   getToken, 
+  setToken,
+  getMe,
   setLogoutHandler, 
   getRates, 
   getOrders, 
@@ -20,7 +22,7 @@ import SubscriptionsView from './components/SubscriptionsView';
 import ReportsView from './components/ReportsView';
 import CustomersView from './components/CustomersView';
 import AlertsView from './components/AlertsView';
-import { ShieldCheck, Lock, User, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Lock, User, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function App() {
   const [lang, setLang] = useState('en');
@@ -28,9 +30,10 @@ export default function App() {
 
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(getToken()));
-  const [user, setUser] = useState({ username: 'admin', role: 'admin' });
-  const [loginUsername, setLoginUsername] = useState('admin');
+  const [user, setUser] = useState({ username: '', role: 'admin' });
+  const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
@@ -62,6 +65,48 @@ export default function App() {
       if (msg) showToast(msg, 'error');
     });
   }, []);
+
+  // Verify token with backend /api/admin/me on initial load
+  useEffect(() => {
+    const token = getToken();
+    if (token) {
+      getMe()
+        .then((res) => {
+          setIsAuthenticated(true);
+          if (res?.admin) setUser(res.admin);
+        })
+        .catch(() => {
+          setIsAuthenticated(false);
+          setToken('');
+        });
+    } else {
+      setIsAuthenticated(false);
+    }
+  }, []);
+
+  // Auto logout after 30 minutes of inactivity
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let timer;
+    const resetInactivityTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        logout();
+        setIsAuthenticated(false);
+        showToast('Logged out due to 30 minutes of inactivity', 'error');
+      }, 30 * 60 * 1000); // 30 minutes
+    };
+
+    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll'];
+    events.forEach(e => window.addEventListener(e, resetInactivityTimer));
+    resetInactivityTimer();
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach(e => window.removeEventListener(e, resetInactivityTimer));
+    };
+  }, [isAuthenticated]);
 
   // Fetch core data
   const loadData = useCallback(async () => {
@@ -160,7 +205,7 @@ export default function App() {
           <div className="w-16 h-16 bg-[#e8f5e9] text-[#1b4332] rounded-2xl mx-auto flex items-center justify-center text-3xl shadow-inner border border-[#a7f3d0] mb-4">
             🌾
           </div>
-          <h1 className="text-2xl font-black text-[#1b4332] tracking-tight">{t.appTitle}</h1>
+          <h1 className="text-2xl font-black text-[#1b4332] tracking-tight">Palle Natural Foods - Admin</h1>
           <p className="text-xs text-gray-500 font-semibold mt-1 uppercase tracking-wider">
             {t.login.title} • {t.subTitle}
           </p>
@@ -188,7 +233,7 @@ export default function App() {
                   value={loginUsername}
                   onChange={(e) => setLoginUsername(e.target.value)}
                   className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2d6a4f]"
-                  placeholder="admin"
+                  placeholder="Username"
                 />
               </div>
             </div>
@@ -200,13 +245,21 @@ export default function App() {
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2d6a4f]"
-                  placeholder="••••••••"
+                  className="w-full pl-9 pr-10 py-2.5 border rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2d6a4f]"
+                  placeholder="••••••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -269,6 +322,7 @@ export default function App() {
           lang={lang}
           ordersCount={ordersData?.total_orders || 0}
           subsCount={subsData?.total_active || 0}
+          onLogout={handleLogout}
         />
 
         {/* Dynamic Main Workspace */}

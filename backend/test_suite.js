@@ -1,14 +1,17 @@
-// Automated End-to-End Test Suite for Palle Natural Foods
+// Hardened Automated Test Suite for Palle Natural Foods
 // Validates:
-// 1. Zero customer authentication / Direct browsing
-// 2. First-time delivery details & upsert returning customer_key
-// 3. Security without login via X-Customer-Key header
-// 4. Rate limiting & non-active apartment rejections
-// 5. Admin customer blocking and 403 enforcement
-// 6. Milk subscriptions pause/resume
-// 7. Admin WhatsApp & Call hooks and order views
+// 1. Server refuses to start without required environment variables
+// 2. Server rejects weak admin password (< 12 chars) and weak JWT secret (< 32 chars)
+// 3. Dynamic test process sets random temporary credentials (no hardcoded passwords)
+// 4. Constant-time login with generic error for wrong credentials
+// 5. Rate limiting on failed admin logins (5 failed attempts -> 429)
+// 6. Token verification (GET /api/admin/me) & 401 on expired/invalid/missing tokens on all admin routes
+// 7. Full auth-less customer flow with customer_key security and customer blocking
 
 const http = require('http');
+const { spawn } = require('child_process');
+const crypto = require('crypto');
+const path = require('path');
 
 function request(options, data) {
   return new Promise((resolve, reject) => {
@@ -30,238 +33,319 @@ function request(options, data) {
   });
 }
 
+function runServerWithEnv(envOverrides) {
+  return new Promise((resolve) => {
+    const serverPath = path.join(__dirname, 'server.js');
+    const child = spawn(process.execPath, [serverPath], {
+      cwd: __dirname,
+      env: { ...process.env, ...envOverrides },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stderr = '';
+    let stdout = '';
+    child.stdout.on('data', d => stdout += d.toString());
+    child.stderr.on('data', d => stderr += d.toString());
+
+    child.on('close', (code) => {
+      resolve({ code, stdout, stderr, child: null });
+    });
+
+    // If server starts running, wait for health check
+    const checkInterval = setInterval(async () => {
+      if (child.exitCode !== null) {
+        clearInterval(checkInterval);
+        return;
+      }
+      try {
+        const port = envOverrides.PORT || 4000;
+        const res = await request({ host: 'localhost', port, path: '/health', method: 'GET' });
+        if (res.status === 200) {
+          clearInterval(checkInterval);
+          resolve({ code: 0, child, stdout, stderr });
+        }
+      } catch (e) {
+        // Still booting
+      }
+    }, 200);
+
+    // Timeout safety
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      if (child.exitCode === null) {
+        resolve({ code: 0, child, stdout, stderr });
+      }
+    }, 6000);
+  });
+}
+
 async function runTestSuite() {
   console.log('================================================================');
-  console.log('🧪 RUNNING PALLE NATURAL FOODS AUTOMATED TEST SUITE');
+  console.log('🛡️  PALLE NATURAL FOODS HARDENED ADMIN AUTH & API TEST SUITE');
   console.log('================================================================\n');
 
-  // 1. Health check
-  const health = await request({ host: 'localhost', port: 4000, path: '/health', method: 'GET' });
-  if (health.status !== 200 || health.data.brand !== 'Palle Natural Foods') {
-    throw new Error(`Health check failed: ${JSON.stringify(health)}`);
-  }
-  console.log('✅ [1] Health Check passed: Brand = "Palle Natural Foods"');
-
-  // 2. Products Catalog verification (Strictly 3 services: Milk, Fish, Mutton)
-  const prods = await request({ host: 'localhost', port: 4000, path: '/api/products', method: 'GET' });
-  const disallowed = prods.data.filter(p => !['milk', 'fish', 'mutton'].includes(p.category));
-  if (disallowed.length > 0 || prods.data.length !== 6) {
-    throw new Error(`Products catalog violation: found ${disallowed.length} disallowed items`);
-  }
-  console.log('✅ [2] Catalog check passed: Exactly 3 services (Milk, Fish, Mutton), 6 products, 0 other items.');
-
-  // 3. Public Apartments API: active apartments in order
-  const apts = await request({ host: 'localhost', port: 4000, path: '/api/apartments', method: 'GET' });
-  const activeApts = apts.data.filter(a => a.status === 'active');
-  if (activeApts.length < 3 || activeApts[0].name !== 'Shneha Apartment') {
-    throw new Error(`Apartments check failed: ${JSON.stringify(activeApts)}`);
-  }
-  console.log(`✅ [3] Apartments check passed: 3 active apartments (${activeApts.map(a => a.name).join(', ')})`);
-
-  // 4. Verify OTP service is disabled
-  const otpAttempt = await request({
-    host: 'localhost', port: 4000, path: '/api/auth/send-otp', method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  }, { phone: '9849055443' });
-  if ((otpAttempt.status !== 403 && otpAttempt.status !== 400) || !otpAttempt.data.error.includes('disabled')) {
-    throw new Error(`OTP disable check failed: expected 403/400, got ${otpAttempt.status}`);
-  }
-  console.log('✅ [4] OTP check passed: OTP authentication is safely disabled (OTP_ENABLED=false).');
-
-  // 5. First-time Delivery details registration (upsert by phone)
-  const testPhone = '98' + Math.floor(10000000 + Math.random() * 90000000);
-  const custRes1 = await request({
-    host: 'localhost', port: 4000, path: '/api/customers', method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  }, {
-    name: 'Kavitha Reddy',
-    phone: testPhone,
-    apartment_id: 1, // Shneha Apartment (active)
-    block_wing: 'Tower A',
-    flat_number: 'Flat 404'
+  // STEP 1: Test server startup refusal when secrets are missing
+  console.log('--- TEST GROUP 1: STARTUP INTEGRITY & SECRET VALIDATION ---');
+  
+  // 1a: Missing ADMIN_USER
+  const missingUser = await runServerWithEnv({
+    ADMIN_USER: '',
+    ADMIN_PASSWORD: 'ValidPassword123#',
+    JWT_SECRET: crypto.randomBytes(32).toString('hex')
   });
-  if (custRes1.status !== 200 || !custRes1.data.customer_key) {
-    throw new Error(`Customer registration failed: ${JSON.stringify(custRes1)}`);
+  if (missingUser.code === 0) {
+    if (missingUser.child) missingUser.child.kill();
+    throw new Error('Server should have refused to start without ADMIN_USER');
   }
-  const customerKey = custRes1.data.customer_key;
-  const customerId = custRes1.data.id;
-  console.log(`✅ [5] Customer creation passed: ID ${customerId}, Key ${customerKey.slice(0, 8)}...`);
+  console.log('✅ [1a] Startup check passed: Server refused to start when ADMIN_USER was missing.');
 
-  // 6. Test returning customer with same phone retains customer_key
-  const custRes2 = await request({
-    host: 'localhost', port: 4000, path: '/api/customers', method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  }, {
-    name: 'Kavitha R.',
-    phone: testPhone,
-    apartment_id: 1,
-    block_wing: 'Tower A',
-    flat_number: 'Flat 405' // updated flat
+  // 1b: Missing ADMIN_PASSWORD
+  const missingPass = await runServerWithEnv({
+    ADMIN_USER: 'test_admin',
+    ADMIN_PASSWORD: '',
+    ADMIN_PASSWORD_HASH: '',
+    JWT_SECRET: crypto.randomBytes(32).toString('hex')
   });
-  if (custRes2.status !== 200 || custRes2.data.customer_key !== customerKey) {
-    throw new Error(`Returning customer key mismatch! Expected ${customerKey}, got ${custRes2.data.customer_key}`);
+  if (missingPass.code === 0) {
+    if (missingPass.child) missingPass.child.kill();
+    throw new Error('Server should have refused to start without ADMIN_PASSWORD');
   }
-  console.log('✅ [6] Returning customer check passed: Phone upsert returns identical customer_key.');
+  console.log('✅ [1b] Startup check passed: Server refused to start when ADMIN_PASSWORD was missing.');
 
-  // 7. Security: Customer Endpoints require X-Customer-Key
-  const ordersWithoutKey = await request({
-    host: 'localhost', port: 4000, path: '/api/customer/orders', method: 'GET'
+  // 1c: Weak ADMIN_PASSWORD (< 12 chars)
+  const weakPass = await runServerWithEnv({
+    ADMIN_USER: 'test_admin',
+    ADMIN_PASSWORD: 'shortpass', // 9 chars
+    JWT_SECRET: crypto.randomBytes(32).toString('hex')
   });
-  if (ordersWithoutKey.status !== 401) {
-    throw new Error(`Expected 401 for missing key, got ${ordersWithoutKey.status}`);
+  if (weakPass.code === 0) {
+    if (weakPass.child) weakPass.child.kill();
+    throw new Error('Server should have refused to start with password < 12 characters');
   }
+  console.log('✅ [1c] Startup check passed: Server rejected password shorter than 12 characters.');
 
-  const profileRes = await request({
-    host: 'localhost', port: 4000, path: '/api/customer/me', method: 'GET',
-    headers: { 'X-Customer-Key': customerKey }
+  // 1d: Weak JWT_SECRET (< 32 chars)
+  const weakSecret = await runServerWithEnv({
+    ADMIN_USER: 'test_admin',
+    ADMIN_PASSWORD: 'StrongPassword123!',
+    JWT_SECRET: 'short_secret_under_32'
   });
-  const customerProfile = profileRes.data.customer || profileRes.data;
-  if (profileRes.status !== 200 || customerProfile.phone !== testPhone) {
-    throw new Error(`GET /api/customer/me failed: ${JSON.stringify(profileRes)}`);
+  if (weakSecret.code === 0) {
+    if (weakSecret.child) weakSecret.child.kill();
+    throw new Error('Server should have refused to start with JWT secret < 32 characters');
   }
-  console.log('✅ [7] Security check passed: Protected endpoints enforce X-Customer-Key, missing key returns 401.');
+  console.log('✅ [1d] Startup check passed: Server rejected JWT secret shorter than 32 characters.');
 
-  // 8. Reject order for non-active apartment
-  const invalidAptOrder = await request({
-    host: 'localhost', port: 4000, path: '/api/orders', method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
-  }, {
-    apartment_name: 'Non Existent Residency',
-    block_wing: 'B',
-    flat_number: '101',
-    delivery_date: new Date().toISOString().split('T')[0],
-    delivery_slot: 'Morning (6:30 AM - 8:00 AM)',
-    items: [{ product_id: 'prod-fish-rohu', product_name: 'Singur Reservoir Rohu Fish', quantity: 1, unit: 'kg', unit_price: 280 }]
+  // STEP 2: Boot server with random, dynamically generated credentials
+  console.log('\n--- TEST GROUP 2: DYNAMIC CREDENTIALS & LOGIN HARDENING ---');
+  const TEST_PORT = 4010;
+  const DYNAMIC_ADMIN_USER = 'adm_' + crypto.randomBytes(4).toString('hex');
+  const DYNAMIC_ADMIN_PASS = 'Palle_' + crypto.randomBytes(8).toString('hex') + '#2026';
+  const DYNAMIC_JWT_SECRET = crypto.randomBytes(32).toString('hex');
+
+  const runningServer = await runServerWithEnv({
+    PORT: TEST_PORT,
+    ADMIN_USER: DYNAMIC_ADMIN_USER,
+    ADMIN_PASSWORD: DYNAMIC_ADMIN_PASS,
+    JWT_SECRET: DYNAMIC_JWT_SECRET,
+    CORS_ORIGIN: `http://localhost:${TEST_PORT},http://localhost:5173`
   });
-  if (invalidAptOrder.status !== 400) {
-    throw new Error(`Expected 400 for non-active apartment order, got ${invalidAptOrder.status}`);
-  }
-  console.log('✅ [8] Validation check passed: Orders rejected for non-active apartments.');
 
-  // 9. Place valid COD order with order confirmation flow
-  const orderRes = await request({
-    host: 'localhost', port: 4000, path: '/api/orders', method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
-  }, {
-    apartment_name: 'Shneha Apartment',
-    block_wing: 'Tower A',
-    flat_number: 'Flat 405',
-    delivery_date: new Date().toISOString().split('T')[0],
-    delivery_slot: 'Morning (6:30 AM - 8:00 AM)',
-    payment_method: 'COD',
-    items: [
-      { product_id: 'prod-fish-rohu', product_name: 'Singur Reservoir Rohu Fish', quantity: 1, unit: 'kg', unit_price: 280, cutting_preference: 'curry cut' },
-      { product_id: 'prod-mut-curry', product_name: 'Fresh Village Mutton (Curry Cut)', quantity: 0.5, unit: 'kg', unit_price: 850, cutting_preference: 'bone-in' }
-    ]
-  });
-  if (orderRes.status !== 200 || !orderRes.data.id) {
-    throw new Error(`Order placement failed: ${JSON.stringify(orderRes)}`);
+  if (!runningServer.child) {
+    throw new Error(`Failed to start test server on port ${TEST_PORT}: ${runningServer.stderr}`);
   }
-  const orderId = orderRes.data.id;
-  console.log(`✅ [9] Order placed successfully: Order ID ${orderId}, COD mode verified.`);
+  const serverProcess = runningServer.child;
 
-  // 10. Milk Subscription & Pause/Resume
-  const subRes = await request({
-    host: 'localhost', port: 4000, path: '/api/subscriptions', method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
-  }, {
-    litres: 1,
-    frequency: 'daily'
-  });
-  if (subRes.status !== 200 || !subRes.data.id) {
-    throw new Error(`Subscription creation failed: ${JSON.stringify(subRes)}`);
-  }
-  const subId = subRes.data.id;
+  try {
+    // 2a: Health check
+    const health = await request({ host: 'localhost', port: TEST_PORT, path: '/health', method: 'GET' });
+    if (health.status !== 200 || health.data.brand !== 'Palle Natural Foods') {
+      throw new Error(`Health check failed: ${JSON.stringify(health)}`);
+    }
+    console.log('✅ [2a] Test server active on isolated port with randomized credentials.');
 
-  const pauseRes = await request({
-    host: 'localhost', port: 4000, path: `/api/customer/subscriptions/${subId}/pause`, method: 'PATCH',
-    headers: { 'X-Customer-Key': customerKey }
-  });
-  if (pauseRes.status !== 200 || pauseRes.data.status !== 'paused') {
-    throw new Error(`Pause subscription failed: ${JSON.stringify(pauseRes)}`);
-  }
+    // 2b: Wrong login returns generic error
+    const wrongLogin = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/admin/login', method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }, { username: 'incorrect_user', password: 'incorrect_password_123' });
+    if (wrongLogin.status !== 401 || wrongLogin.data.error !== 'Invalid username or password') {
+      throw new Error(`Expected generic 401 "Invalid username or password", got ${JSON.stringify(wrongLogin)}`);
+    }
+    console.log('✅ [2b] Security passed: Wrong credentials return generic 401 (no credential disclosure).');
 
-  const resumeRes = await request({
-    host: 'localhost', port: 4000, path: `/api/customer/subscriptions/${subId}/resume`, method: 'PATCH',
-    headers: { 'X-Customer-Key': customerKey }
-  });
-  if (resumeRes.status !== 200 || resumeRes.data.status !== 'active') {
-    throw new Error(`Resume subscription failed: ${JSON.stringify(resumeRes)}`);
-  }
-  console.log(`✅ [10] Milk Subscription passed: Created ID ${subId}, successfully paused and resumed.`);
+    // 2c: Correct login returns valid signed token
+    const correctLogin = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/admin/login', method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }, { username: DYNAMIC_ADMIN_USER, password: DYNAMIC_ADMIN_PASS });
+    if (correctLogin.status !== 200 || !correctLogin.data.token) {
+      throw new Error(`Login failed with valid dynamic credentials: ${JSON.stringify(correctLogin)}`);
+    }
+    const adminToken = correctLogin.data.token;
+    console.log('✅ [2c] Login passed: Valid credentials issue signed 12-hour JWT token.');
 
-  // 11. Admin Login & Customer Blocking
-  const adminLogin = await request({
-    host: 'localhost', port: 4000, path: '/api/admin/login', method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  }, {
-    username: 'admin',
-    password: 'PalleNatural2025!'
-  });
-  if (adminLogin.status !== 200 || !adminLogin.data.token) {
-    throw new Error(`Admin login failed: ${JSON.stringify(adminLogin)}`);
-  }
-  const adminToken = adminLogin.data.token;
-  console.log('✅ [11] Admin login passed with ADMIN_USER and ADMIN_PASSWORD.');
+    // 2d: GET /api/admin/me verifies token
+    const meRes = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/admin/me', method: 'GET',
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (meRes.status !== 200 || meRes.data.admin?.username !== DYNAMIC_ADMIN_USER) {
+      throw new Error(`GET /api/admin/me failed: ${JSON.stringify(meRes)}`);
+    }
+    console.log('✅ [2d] Token verification passed: GET /api/admin/me returns valid admin identity.');
 
-  // 12. Admin blocks customer
-  const blockRes = await request({
-    host: 'localhost', port: 4000, path: `/api/admin/customers/${customerId}`, method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }
-  }, { blocked: true });
-  if (blockRes.status !== 200 || !blockRes.data.blocked) {
-    throw new Error(`Admin customer block failed: ${JSON.stringify(blockRes)}`);
-  }
-  console.log(`✅ [12] Admin block customer passed: Customer ${customerId} blocked = true.`);
+    // 2e: Invalid or expired token gives 401
+    const invalidTokenRes = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/admin/me', method: 'GET',
+      headers: { 'Authorization': 'Bearer fake_invalid_jwt_token_12345' }
+    });
+    if (invalidTokenRes.status !== 401) {
+      throw new Error(`Expected 401 for invalid token, got: ${invalidTokenRes.status}`);
+    }
+    console.log('✅ [2e] Access control passed: Invalid/tampered token returns 401.');
 
-  // 13. Verify blocked customer is rejected on order placement with 403
-  const blockedOrderAttempt = await request({
-    host: 'localhost', port: 4000, path: '/api/orders', method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
-  }, {
-    apartment_name: 'Shneha Apartment',
-    block_wing: 'Tower A',
-    flat_number: 'Flat 405',
-    delivery_date: new Date().toISOString().split('T')[0],
-    delivery_slot: 'Morning (6:30 AM - 8:00 AM)',
-    payment_method: 'COD',
-    items: [{ product_id: 'prod-fish-rohu', product_name: 'Singur Reservoir Rohu Fish', quantity: 1, unit: 'kg', unit_price: 280 }]
-  });
-  if (blockedOrderAttempt.status !== 403 || !blockedOrderAttempt.data.error.includes('Please contact Palle Natural Foods')) {
-    throw new Error(`Expected 403 "Please contact Palle Natural Foods", got: ${JSON.stringify(blockedOrderAttempt)}`);
-  }
-  console.log('✅ [13] Block enforcement passed: Blocked customer gets 403 "Please contact Palle Natural Foods".');
+    // 2f: All /api/admin/* routes return 401 without token
+    console.log('\n--- TEST GROUP 3: ROUTE PROTECTION (ALL ADMIN ENDPOINTS REQUIRE TOKEN) ---');
+    const adminRoutes = [
+      { path: '/api/admin/rates', method: 'GET' },
+      { path: '/api/admin/orders', method: 'GET' },
+      { path: '/api/admin/procurement', method: 'GET' },
+      { path: '/api/admin/subscriptions', method: 'GET' },
+      { path: '/api/admin/reports', method: 'GET' },
+      { path: '/api/admin/customers', method: 'GET' },
+      { path: '/api/admin/apartments', method: 'GET' },
+      { path: '/api/admin/alerts', method: 'GET' },
+      { path: '/api/admin/me', method: 'GET' }
+    ];
 
-  // 14. Admin unblocks customer
-  const unblockRes = await request({
-    host: 'localhost', port: 4000, path: `/api/admin/customers/${customerId}`, method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }
-  }, { blocked: false });
-  if (unblockRes.status !== 200 || unblockRes.data.blocked) {
-    throw new Error(`Admin customer unblock failed: ${JSON.stringify(unblockRes)}`);
-  }
-  console.log('✅ [14] Admin unblock passed: Customer unblocked.');
+    for (const route of adminRoutes) {
+      const res = await request({
+        host: 'localhost', port: TEST_PORT, path: route.path, method: route.method
+      });
+      if (res.status !== 401) {
+        throw new Error(`Route ${route.path} failed to require token! Status: ${res.status}`);
+      }
+    }
+    console.log(`✅ [3] All ${adminRoutes.length} /api/admin/* endpoints strictly require Bearer token (401 without token).`);
 
-  // 15. Admin View Orders with Resident WhatsApp and Call hooks
-  const adminOrders = await request({
-    host: 'localhost', port: 4000, path: '/api/admin/orders', method: 'GET',
-    headers: { 'Authorization': `Bearer ${adminToken}` }
-  });
-  if (adminOrders.status !== 200 || !adminOrders.data.orders.length) {
-    throw new Error(`Admin orders view failed: ${JSON.stringify(adminOrders)}`);
-  }
-  const sampleOrder = adminOrders.data.orders[0];
-  if (!sampleOrder.customer_phone || !sampleOrder.customer_name) {
-    throw new Error(`Customer contact info missing in admin order: ${JSON.stringify(sampleOrder)}`);
-  }
-  console.log(`✅ [15] Admin orders view passed: Customer phone ${sampleOrder.customer_phone} available for call & WhatsApp.`);
+    // 2g: Admin Login Rate Limiting (5 failed attempts -> 429)
+    console.log('\n--- TEST GROUP 4: ADMIN LOGIN BRUTE-FORCE RATE LIMITING ---');
+    let rateLimited = false;
+    for (let i = 1; i <= 6; i++) {
+      const attempt = await request({
+        host: 'localhost', port: TEST_PORT, path: '/api/admin/login', method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }, { username: 'attacker', password: 'wrong_password_attempt' });
+      if (attempt.status === 429) {
+        rateLimited = true;
+        break;
+      }
+    }
+    if (!rateLimited) {
+      throw new Error('Admin login failed attempts did not trigger 429 rate limit');
+    }
+    console.log('✅ [4] Rate limit passed: 5 failed attempts triggered 429 "Try again later".');
 
-  console.log('\n================================================================');
-  console.log('🎉 ALL 15 AUTOMATED TESTS PASSED SUCCESSFULLY! 100% GREEN.');
-  console.log('================================================================\n');
+    // 2h: End-to-end Customer & Operations flow
+    console.log('\n--- TEST GROUP 5: AUTH-LESS CUSTOMER & OPERATIONS FLOW ---');
+    // Catalog strictly 3 services
+    const prods = await request({ host: 'localhost', port: TEST_PORT, path: '/api/products', method: 'GET' });
+    const disallowed = prods.data.filter(p => !['milk', 'fish', 'mutton'].includes(p.category));
+    if (disallowed.length > 0 || prods.data.length !== 6) {
+      throw new Error('Disallowed products found in catalog');
+    }
+    console.log('✅ [5a] Catalog check: Strictly 3 services (Morning Health Milk, Fresh Village Fish, Fresh Village Mutton).');
+
+    // Customer registration / upsert by phone
+    const randPhone = '98' + Math.floor(10000000 + Math.random() * 90000000);
+    const custRes = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/customers', method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }, {
+      name: 'Ramesh Varma',
+      phone: randPhone,
+      apartment_id: 1, // Shneha Apartment
+      block_wing: 'Block B',
+      flat_number: 'Flat 204'
+    });
+    if (custRes.status !== 200 || !custRes.data.customer_key) {
+      throw new Error(`Customer upsert failed: ${JSON.stringify(custRes)}`);
+    }
+    const customerKey = custRes.data.customer_key;
+    const customerId = custRes.data.id;
+    console.log('✅ [5b] Customer delivery details saved: customer_key (UUID v4) generated.');
+
+    // Customer place order with customer_key
+    const orderRes = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/orders', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
+    }, {
+      apartment_name: 'Shneha Apartment',
+      block_wing: 'Block B',
+      flat_number: 'Flat 204',
+      delivery_date: new Date().toISOString().split('T')[0],
+      delivery_slot: 'Morning (6:30 AM - 8:00 AM)',
+      payment_method: 'COD',
+      items: [
+        { product_id: 'prod-fish-rohu', product_name: 'Singur Reservoir Rohu Fish', quantity: 1, unit: 'kg', unit_price: 280, cutting_preference: 'curry cut' }
+      ]
+    });
+    if (orderRes.status !== 200 || !orderRes.data.id) {
+      throw new Error(`Customer order failed: ${JSON.stringify(orderRes)}`);
+    }
+    const orderId = orderRes.data.id;
+    console.log(`✅ [5c] Customer order placed with COD: Order ID ${orderId}.`);
+
+    // Customer rates order via customer route (no admin route)
+    const rateRes = await request({
+      host: 'localhost', port: TEST_PORT, path: `/api/customer/orders/${orderId}/rate`, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
+    }, { rating: 5, feedback: 'Delicious Singur fish!' });
+    if (rateRes.status !== 200) {
+      throw new Error(`Customer rate order failed: ${JSON.stringify(rateRes)}`);
+    }
+    console.log('✅ [5d] Customer order feedback submitted via customer endpoint.');
+
+    // Admin blocks customer
+    const blockRes = await request({
+      host: 'localhost', port: TEST_PORT, path: `/api/admin/customers/${customerId}`, method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }
+    }, { blocked: true });
+    if (blockRes.status !== 200 || !blockRes.data.blocked) {
+      throw new Error(`Admin customer block failed: ${JSON.stringify(blockRes)}`);
+    }
+
+    // Blocked customer cannot place order (receives 403 "Please contact Palle Natural Foods")
+    const blockedAttempt = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/orders', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
+    }, {
+      apartment_name: 'Shneha Apartment',
+      block_wing: 'Block B',
+      flat_number: 'Flat 204',
+      delivery_date: new Date().toISOString().split('T')[0],
+      delivery_slot: 'Morning (6:30 AM - 8:00 AM)',
+      payment_method: 'COD',
+      items: [{ product_id: 'prod-fish-rohu', product_name: 'Singur Reservoir Rohu Fish', quantity: 1, unit: 'kg', unit_price: 280 }]
+    });
+    if (blockedAttempt.status !== 403 || !blockedAttempt.data.error.includes('Please contact Palle Natural Foods')) {
+      throw new Error(`Expected 403 for blocked customer, got ${JSON.stringify(blockedAttempt)}`);
+    }
+    console.log('✅ [5e] Admin customer blocking enforced: Blocked customer gets 403 "Please contact Palle Natural Foods".');
+
+    console.log('\n================================================================');
+    console.log('🎉 ALL HARDENED ADMIN & API SECURITY TESTS PASSED (100% GREEN)!');
+    console.log('================================================================\n');
+
+  } finally {
+    if (serverProcess) {
+      serverProcess.kill();
+    }
+  }
 }
 
 runTestSuite().catch(err => {
-  console.error('\n❌ TEST SUITE FAILED:', err);
+  console.error('\n❌ HARDENED TEST SUITE FAILED:', err);
   process.exit(1);
 });

@@ -11,19 +11,43 @@ const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const TOKEN_SECRET = process.env.TOKEN_SECRET || 'palle-natural-foods-secret-jwt-key-2025';
-const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'PalleNatural2025!';
 
-// Security Check: Warn if admin password is under 12 characters
-if (ADMIN_PASSWORD.length < 12) {
-  console.warn('⚠️ SECURITY WARNING: ADMIN_PASSWORD is under 12 characters. Use a 12+ character pass in production.');
+// Read credentials strictly from environment variables ONLY - NO DEFAULT FALLBACKS
+const ADMIN_USER = process.env.ADMIN_USER;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
+const JWT_SECRET = process.env.JWT_SECRET || process.env.TOKEN_SECRET;
+
+// STRICT REFUSAL CHECKS AT STARTUP (Never print secret values)
+if (!ADMIN_USER) {
+  console.error('FATAL: ADMIN_USER environment variable is missing. Server refused to start.');
+  process.exit(1);
+}
+
+if (!ADMIN_PASSWORD && !ADMIN_PASSWORD_HASH) {
+  console.error('FATAL: ADMIN_PASSWORD or ADMIN_PASSWORD_HASH environment variable is missing. Server refused to start.');
+  process.exit(1);
+}
+
+if (ADMIN_PASSWORD && ADMIN_PASSWORD.length < 12) {
+  console.error('FATAL: ADMIN_PASSWORD is too short (must be at least 12 characters). Server refused to start.');
+  process.exit(1);
+}
+
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is missing. Server refused to start.');
+  process.exit(1);
+}
+
+if (JWT_SECRET.length < 32) {
+  console.error('FATAL: JWT_SECRET is too short (must be at least 32 characters). Server refused to start.');
+  process.exit(1);
 }
 
 // Pre-compute hash for env password
-let adminPasswordHash = ADMIN_PASSWORD.startsWith('$2') 
+let adminPasswordHash = ADMIN_PASSWORD_HASH || (ADMIN_PASSWORD.startsWith('$2') 
   ? ADMIN_PASSWORD 
-  : bcrypt.hashSync(ADMIN_PASSWORD, 10);
+  : bcrypt.hashSync(ADMIN_PASSWORD, 10));
 
 // Constant-time password check
 function verifyAdminPassword(inputPassword, storedHash) {
@@ -52,18 +76,24 @@ app.use(helmet({
   crossOriginResourcePolicy: false
 }));
 
-// CORS Configuration
-const allowedOrigins = process.env.CORS_ORIGIN 
-  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) 
-  : '*';
+// CORS Configuration (Strictly restricted to CORS_ORIGIN)
+const rawCors = process.env.CORS_ORIGIN || '';
+const corsOrigins = rawCors ? rawCors.split(',').map(s => s.trim()).filter(Boolean) : [];
 
 app.use(cors({
-  origin: allowedOrigins === '*' ? true : allowedOrigins,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (corsOrigins.length === 0 || corsOrigins.includes('*') || corsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Blocked by CORS policy'));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Customer-Key']
 }));
 
-app.use(express.json());
+// Request body size limit
+app.use(express.json({ limit: '100kb' }));
 
 // Feature Flags
 const OTP_ENABLED = process.env.OTP_ENABLED === 'true'; // Disabled by default for frictionless order flow
@@ -72,8 +102,9 @@ const OTP_ENABLED = process.env.OTP_ENABLED === 'true'; // Disabled by default f
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  skipSuccessfulRequests: true, // Only failed attempts consume quota
   message: {
-    error: 'Too many login attempts. Please try again after 15 minutes.'
+    error: 'Too many failed login attempts. Try again later.'
   },
   standardHeaders: true,
   legacyHeaders: false
@@ -124,7 +155,7 @@ function authenticateAdmin(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, TOKEN_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
     }
@@ -293,24 +324,26 @@ app.post('/api/auth/verify-otp', otpVerifyLimiter, async (req, res) => {
 // ============================================================================
 app.post('/api/admin/login', loginLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password } = req.body || {};
     if (!username || !password) {
+      console.warn(`[SECURITY] Failed admin login attempt at ${new Date().toISOString()} from IP: ${req.ip} (missing fields)`);
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    if (!safeCompare(username, ADMIN_USER)) {
+    const isUserValid = safeCompare(username, ADMIN_USER);
+    const isPassValid = verifyAdminPassword(password, adminPasswordHash);
+
+    // Constant-time check: generic error for wrong username OR password (never reveal which one is wrong)
+    if (!isUserValid || !isPassValid) {
+      console.warn(`[SECURITY] Failed admin login attempt at ${new Date().toISOString()} from IP: ${req.ip}`);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    const isValid = verifyAdminPassword(password, adminPasswordHash);
-    if (!isValid) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
-
+    // Sign JWT (HS256) with role "admin" and expiry of 12 hours
     const token = jwt.sign(
       { username: ADMIN_USER, role: 'admin' },
-      TOKEN_SECRET,
-      { expiresIn: '7d' }
+      JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: '12h' }
     );
 
     res.json({
@@ -325,6 +358,17 @@ app.post('/api/admin/login', loginLimiter, async (req, res) => {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error during login' });
   }
+});
+
+// Verify token on page load
+app.get('/api/admin/me', authenticateAdmin, (req, res) => {
+  res.json({
+    success: true,
+    admin: {
+      username: req.admin.username,
+      role: req.admin.role
+    }
+  });
 });
 
 // ============================================================================
@@ -640,6 +684,16 @@ app.patch('/api/customer/subscriptions/:id/resume', requireCustomerKey, async (r
     }
     const updated = await db.updateSubscription(req.params.id, { action: 'resume' });
     res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/customer/orders/:id/rate', requireCustomerKey, async (req, res) => {
+  try {
+    const { rating, feedback } = req.body || {};
+    const updated = await db.updateOrder(req.params.id, { rating, feedback });
+    res.json({ success: true, message: 'Rating saved', order: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

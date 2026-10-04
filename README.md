@@ -138,9 +138,9 @@ zfresh/
      DB_NAME=u123456789_palle
      DB_USER=u123456789_palleuser
      DB_PASSWORD=your_mysql_password
-     ADMIN_USER=palle_owner
-     ADMIN_PASSWORD=your_strong_admin_password_12plus
-     TOKEN_SECRET=your_random_64_char_secret_token
+     ADMIN_USER=CHANGE_ME
+     ADMIN_PASSWORD=CHANGE_ME_MIN_12_CHARS
+     JWT_SECRET=CHANGE_ME_MIN_32_CHARS
      CORS_ORIGIN=https://yourdomain.com,https://admin.yourdomain.com
      ```
    - Run `npm install` and start the application.
@@ -183,7 +183,7 @@ If you are on a Hostinger VPS:
    ```bash
    sudo mysql_secure_installation
    sudo mysql -u root -p -e "CREATE DATABASE palle_natural_foods CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-   sudo mysql -u root -p -e "CREATE USER 'palle_user'@'localhost' IDENTIFIED BY 'StrongPassword123#';"
+   sudo mysql -u root -p -e "CREATE USER 'palle_user'@'localhost' IDENTIFIED BY 'CHANGE_ME_STRONG_PASSWORD';"
    sudo mysql -u root -p -e "GRANT ALL PRIVILEGES ON palle_natural_foods.* TO 'palle_user'@'localhost'; FLUSH PRIVILEGES;"
    mysql -u palle_user -p palle_natural_foods < database/schema.sql
    mysql -u palle_user -p palle_natural_foods < database/seed.sql

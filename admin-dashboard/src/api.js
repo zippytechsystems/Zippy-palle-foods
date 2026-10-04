@@ -4,21 +4,34 @@
 const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
 
 let logoutHandler = null;
+let inMemoryToken = '';
 
 export function setLogoutHandler(handler) {
   logoutHandler = handler;
 }
 
 export function getToken() {
-  return localStorage.getItem('zfresh_admin_token') || '';
+  if (inMemoryToken) return inMemoryToken;
+  try {
+    inMemoryToken = sessionStorage.getItem('palle_admin_token') || '';
+  } catch (e) {
+    inMemoryToken = '';
+  }
+  return inMemoryToken;
 }
 
 export function setToken(token) {
-  if (token) {
-    localStorage.setItem('zfresh_admin_token', token);
-  } else {
+  inMemoryToken = token || '';
+  try {
+    if (token) {
+      sessionStorage.setItem('palle_admin_token', token);
+    } else {
+      sessionStorage.removeItem('palle_admin_token');
+    }
+    // Clean up any legacy localStorage items
     localStorage.removeItem('zfresh_admin_token');
-  }
+    localStorage.removeItem('palle_admin_token');
+  } catch (e) {}
 }
 
 export async function apiRequest(endpoint, options = {}) {
@@ -42,9 +55,9 @@ export async function apiRequest(endpoint, options = {}) {
     if (response.status === 401) {
       setToken('');
       if (logoutHandler) {
-        logoutHandler('Access denied. Session expired or unauthorized.');
+        logoutHandler('Session expired or access denied. Please log in again.');
       }
-      throw new Error('Access denied. Please log in again.');
+      throw new Error('Session expired or access denied. Please log in again.');
     }
 
     const data = await response.json().catch(() => ({}));
@@ -56,6 +69,10 @@ export async function apiRequest(endpoint, options = {}) {
   } catch (err) {
     throw err;
   }
+}
+
+export async function getMe() {
+  return apiRequest('/api/admin/me');
 }
 
 // ---------------------------------------------------------------------------
