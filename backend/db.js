@@ -103,6 +103,28 @@ const memoryStore = {
       available: true,
       image_url: 'assets/mutton.jpg',
       description: 'Hand-minced fresh village mutton keema, zero frozen meat, zero preservatives.'
+    },
+    {
+      id: 'prod-mut-liver',
+      name: 'Mutton Liver',
+      category: 'mutton',
+      unit: 'kg',
+      price: 900.0,
+      buy_price: 720.0,
+      available: true,
+      image_url: 'assets/mutton.jpg',
+      description: 'Fresh pasture-fed village sheep liver, nutrient-dense and tender.'
+    },
+    {
+      id: 'prod-mut-paya',
+      name: 'Mutton Paya (Soup Cuts)',
+      category: 'mutton',
+      unit: 'kg',
+      price: 450.0,
+      buy_price: 320.0,
+      available: true,
+      image_url: 'assets/mutton.jpg',
+      description: 'Traditional village cleaned sheep trotters / legs, ideal for immunity soup.'
     }
   ],
   rate_history: [
@@ -111,6 +133,40 @@ const memoryStore = {
     { id: 3, product_id: 'prod-mut-curry', old_price: 820, new_price: 850, old_buy_price: 650, new_buy_price: 680, changed_at: new Date(Date.now() - 3 * 86400000).toISOString() },
     { id: 4, product_id: 'prod-milk-morning', old_price: 85, new_price: 90, old_buy_price: 65, new_buy_price: 70, changed_at: new Date(Date.now() - 5 * 86400000).toISOString() }
   ],
+  services: [
+    {
+      id: 'srv-fish',
+      category: 'fish',
+      name: 'Fresh Village Fish',
+      description: 'Freshwater pond fish from Telangana irrigation tanks. Cleaned, cut to order.',
+      enabled: 1,
+      sort_order: 1
+    },
+    {
+      id: 'srv-mutton',
+      category: 'mutton',
+      name: 'Fresh Village Mutton',
+      description: 'Grass-fed village sheep from Alair pastoralists. Washed with natural turmeric.',
+      enabled: 1,
+      sort_order: 2
+    },
+    {
+      id: 'srv-milk',
+      category: 'milk',
+      name: 'Morning Health Milk',
+      description: 'Pure raw A2 Desi cow & buffalo milk from Siddipet & Gajwel farmers. Postponed in Phase 1.',
+      enabled: 0,
+      sort_order: 3
+    }
+  ],
+  settings: {
+    order_cutoff_time: '21:00',
+    allow_sameday_orders: 'false',
+    delivery_slots: JSON.stringify(['Morning (7:00 AM - 10:00 AM)', 'Evening (5:00 PM - 8:00 PM)']),
+    min_order_amount: '0',
+    delivery_charge: '0'
+  },
+  service_leads: [],
   apartments: [
     { id: 1, name: 'Shneha Apartment', area: 'HMT Nagar', status: 'active', launch_date: null, sort_order: 1, created_at: new Date().toISOString() },
     { id: 2, name: 'Amdur Castle Apartment', area: 'HMT Nagar', status: 'active', launch_date: null, sort_order: 2, created_at: new Date().toISOString() },
@@ -321,26 +377,58 @@ async function testMySQL() {
 // ---------------------------------------------------------------------------
 
 // 1. PRODUCTS
-async function getProducts() {
+async function getProducts(includeDisabled = false) {
   if (await testMySQL()) {
-    const [rows] = await pool.query(
-      "SELECT id, name, category, unit, CAST(price AS DECIMAL(10,2)) AS price, CAST(buy_price AS DECIMAL(10,2)) AS buy_price, available, image_url, description FROM products WHERE category IN ('milk', 'fish', 'mutton') ORDER BY category ASC"
-    );
-    return rows.map(r => ({
-      ...r,
-      price: Number(r.price),
-      buy_price: Number(r.buy_price),
-      available: Boolean(r.available)
-    }));
+    try {
+      let sql = "SELECT p.id, p.name, p.category, p.unit, CAST(p.price AS DECIMAL(10,2)) AS price, CAST(p.buy_price AS DECIMAL(10,2)) AS buy_price, p.available, p.image_url, p.description FROM products p";
+      if (!includeDisabled) {
+        sql += " JOIN services s ON p.category = s.category WHERE s.enabled = 1";
+      } else {
+        sql += " WHERE p.category IN ('milk', 'fish', 'mutton')";
+      }
+      sql += " ORDER BY p.category ASC, p.name ASC";
+      const [rows] = await pool.query(sql);
+      return rows.map(r => ({
+        ...r,
+        price: Number(r.price),
+        buy_price: Number(r.buy_price),
+        available: Boolean(r.available)
+      }));
+    } catch (err) {
+      const [rows] = await pool.query(
+        "SELECT id, name, category, unit, CAST(price AS DECIMAL(10,2)) AS price, CAST(buy_price AS DECIMAL(10,2)) AS buy_price, available, image_url, description FROM products WHERE category IN ('milk', 'fish', 'mutton') ORDER BY category ASC, name ASC"
+      );
+      const prods = rows.map(r => ({
+        ...r,
+        price: Number(r.price),
+        buy_price: Number(r.buy_price),
+        available: Boolean(r.available)
+      }));
+      if (!includeDisabled) {
+        const enabledCats = new Set((await getServices(true)).map(s => s.category));
+        return prods.filter(p => enabledCats.has(p.category));
+      }
+      return prods;
+    }
   }
-  return memoryStore.products;
+
+  const enabledCats = new Set(
+    (memoryStore.services || [])
+      .filter(s => Boolean(s.enabled))
+      .map(s => s.category)
+  );
+
+  return memoryStore.products
+    .filter(p => includeDisabled || enabledCats.has(p.category))
+    .map(p => ({ ...p }));
 }
 
 // 2. RATES
 async function getRates() {
+  const enabledCats = new Set((await getServices(true)).map(s => s.category));
   if (await testMySQL()) {
     const [rows] = await pool.query(
-      'SELECT id, name, category, unit, price, buy_price, available FROM products ORDER BY category ASC'
+      'SELECT id, name, category, unit, price, buy_price, available FROM products ORDER BY category ASC, name ASC'
     );
     return rows.map(p => ({
       id: p.id,
@@ -350,7 +438,8 @@ async function getRates() {
       price: Number(p.price),
       buy_price: Number(p.buy_price),
       margin: Number((Number(p.price) - Number(p.buy_price)).toFixed(2)),
-      available: Boolean(p.available)
+      available: Boolean(p.available),
+      service_enabled: enabledCats.has(p.category)
     }));
   }
   return memoryStore.products.map(p => ({
@@ -361,7 +450,8 @@ async function getRates() {
     price: Number(p.price),
     buy_price: Number(p.buy_price),
     margin: Number((Number(p.price) - Number(p.buy_price)).toFixed(2)),
-    available: p.available
+    available: p.available,
+    service_enabled: enabledCats.has(p.category)
   }));
 }
 
@@ -453,78 +543,75 @@ async function getRateHistory(productId) {
 // 3. PROCUREMENT (BUYING LIST FOR DELIVERY DATE)
 async function getProcurement(dateStr) {
   const targetDate = dateStr || new Date().toISOString().split('T')[0];
-  const products = await getProducts();
-  const prodMap = {};
-  products.forEach(p => {
-    prodMap[p.id] = {
-      name: p.name,
-      category: p.category,
-      unit: p.unit,
-      quantity: 0,
-      buy_price: Number(p.buy_price || 0)
-    };
+  const isMilkEnabled = await isCategoryEnabled('milk');
+  const allProducts = await getProducts(true);
+  const baseProdMap = {};
+  allProducts.forEach(p => {
+    baseProdMap[p.id] = p;
   });
+
+  const grouped = {};
+
+  const addProcItem = (prodId, cutInstruction, qty) => {
+    const p = baseProdMap[prodId] || { name: 'Unknown', category: 'other', unit: 'kg', buy_price: 0 };
+    if (!isMilkEnabled && p.category === 'milk') return;
+
+    let cutLabel = (cutInstruction || '').trim();
+    if (cutLabel.includes('(')) {
+      cutLabel = cutLabel.split('(')[0].trim();
+    }
+
+    let displayName = p.name;
+    let groupKey = p.id;
+    if (p.category === 'fish' && cutLabel) {
+      displayName = `${p.name} (${cutLabel})`;
+      groupKey = `${p.id}_${cutLabel.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    } else if (p.category === 'mutton' && cutLabel && !p.name.toLowerCase().includes(cutLabel.toLowerCase())) {
+      displayName = `${p.name} (${cutLabel})`;
+      groupKey = `${p.id}_${cutLabel.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    }
+
+    if (!grouped[groupKey]) {
+      grouped[groupKey] = {
+        product_id: p.id,
+        name: displayName,
+        category: p.category,
+        cut: cutLabel || p.name,
+        unit: p.unit,
+        quantity: 0,
+        estimated_buy_price: Number(p.buy_price || 0)
+      };
+    }
+    grouped[groupKey].quantity += Number(qty);
+  };
 
   if (await testMySQL()) {
     // 1. Orders on target date
     const [orderItems] = await pool.query(
-      `SELECT oi.product_id, SUM(oi.quantity) AS total_qty
+      `SELECT oi.product_id, oi.name, oi.cutting_instructions, SUM(oi.quantity) AS total_qty
        FROM order_items oi
        JOIN orders o ON oi.order_id = o.id
        WHERE o.delivery_date = ? AND o.status != 'cancelled'
-       GROUP BY oi.product_id`,
+       GROUP BY oi.product_id, oi.cutting_instructions`,
       [targetDate]
     );
 
     orderItems.forEach(item => {
-      if (prodMap[item.product_id]) {
-        prodMap[item.product_id].quantity += Number(item.total_qty);
-      }
+      addProcItem(item.product_id, item.cutting_instructions, item.total_qty);
     });
 
     // 2. Active Milk Subscriptions delivering on target date
-    const [subs] = await pool.query(
-      `SELECT litres, frequency, start_date, paused_until
+    if (isMilkEnabled) {
+      const [subs] = await pool.query(
+        `SELECT litres, frequency, start_date, paused_until
        FROM subscriptions
        WHERE status = 'active'`
-    );
+      );
 
-    const targetTime = new Date(targetDate).getTime();
-    subs.forEach(sub => {
-      if (sub.paused_until && new Date(sub.paused_until).getTime() >= targetTime) {
-        return; // Paused
-      }
-      let deliversToday = false;
-      if (sub.frequency === 'daily') {
-        deliversToday = true;
-      } else if (sub.frequency === 'alternate') {
-        const start = new Date(sub.start_date || targetDate).getTime();
-        const diffDays = Math.floor((targetTime - start) / 86400000);
-        if (diffDays >= 0 && diffDays % 2 === 0) deliversToday = true;
-      }
-
-      if (deliversToday && prodMap['prod-milk-morning']) {
-        prodMap['prod-milk-morning'].quantity += Number(sub.litres);
-      }
-    });
-  } else {
-    // Memory store fallback
-    memoryStore.orders
-      .filter(o => o.delivery_date === targetDate && o.status !== 'cancelled')
-      .forEach(o => {
-        (o.items || []).forEach(item => {
-          if (prodMap[item.product_id]) {
-            prodMap[item.product_id].quantity += Number(item.quantity);
-          }
-        });
-      });
-
-    const targetTime = new Date(targetDate).getTime();
-    memoryStore.subscriptions
-      .filter(s => s.status === 'active')
-      .forEach(sub => {
+      const targetTime = new Date(targetDate).getTime();
+      subs.forEach(sub => {
         if (sub.paused_until && new Date(sub.paused_until).getTime() >= targetTime) {
-          return;
+          return; // Paused
         }
         let deliversToday = false;
         if (sub.frequency === 'daily') {
@@ -534,24 +621,57 @@ async function getProcurement(dateStr) {
           const diffDays = Math.floor((targetTime - start) / 86400000);
           if (diffDays >= 0 && diffDays % 2 === 0) deliversToday = true;
         }
-        if (deliversToday && prodMap['prod-milk-morning']) {
-          prodMap['prod-milk-morning'].quantity += Number(sub.litres);
+
+        if (deliversToday) {
+          addProcItem('prod-milk-morning', 'Glass bottle', Number(sub.litres));
         }
       });
+    }
+  } else {
+    // Memory store fallback
+    memoryStore.orders
+      .filter(o => o.delivery_date === targetDate && o.status !== 'cancelled')
+      .forEach(o => {
+        (o.items || []).forEach(item => {
+          addProcItem(item.product_id, item.cutting_instructions || item.cutting_preference, item.quantity);
+        });
+      });
+
+    if (isMilkEnabled) {
+      const targetTime = new Date(targetDate).getTime();
+      (memoryStore.subscriptions || [])
+        .filter(s => s.status === 'active')
+        .forEach(sub => {
+          if (sub.paused_until && new Date(sub.paused_until).getTime() >= targetTime) {
+            return;
+          }
+          let deliversToday = false;
+          if (sub.frequency === 'daily') {
+            deliversToday = true;
+          } else if (sub.frequency === 'alternate') {
+            const start = new Date(sub.start_date || targetDate).getTime();
+            const diffDays = Math.floor((targetTime - start) / 86400000);
+            if (diffDays >= 0 && diffDays % 2 === 0) deliversToday = true;
+          }
+          if (deliversToday) {
+            addProcItem('prod-milk-morning', 'Glass bottle', Number(sub.litres));
+          }
+        });
+    }
   }
 
-  const items = Object.keys(prodMap)
-    .filter(k => prodMap[k].quantity > 0)
-    .map(k => {
-      const p = prodMap[k];
-      const estCost = Number((p.quantity * p.buy_price).toFixed(2));
+  const items = Object.values(grouped)
+    .filter(g => g.quantity > 0)
+    .map(g => {
+      const estCost = Number((g.quantity * g.estimated_buy_price).toFixed(2));
       return {
-        product_id: k,
-        name: p.name,
-        category: p.category,
-        unit: p.unit,
-        quantity: Number(p.quantity.toFixed(2)),
-        estimated_buy_price: p.buy_price,
+        product_id: g.product_id,
+        name: g.name,
+        category: g.category,
+        cut: g.cut,
+        unit: g.unit,
+        quantity: Number(g.quantity.toFixed(2)),
+        estimated_buy_price: g.estimated_buy_price,
         estimated_buy_cost: estCost
       };
     });
@@ -835,8 +955,9 @@ async function updateSubscription(id, { action, until, litres }) {
 async function getReports(period = 'daily') {
   const days = period === 'monthly' ? 30 : period === 'weekly' ? 7 : 1;
   const cutoffDate = new Date(Date.now() - (days - 1) * 86400000).toISOString().split('T')[0];
+  const isMilkEnabled = await isCategoryEnabled('milk');
 
-  const products = await getProducts();
+  const products = await getProducts(true);
   const prodCostMap = {};
   products.forEach(p => {
     prodCostMap[p.id] = { name: p.name, category: p.category, buy_price: Number(p.buy_price) };
@@ -949,7 +1070,7 @@ async function getReports(period = 'daily') {
       average_order_value: Number(avg_order_value.toFixed(2))
     },
     chart_data: Object.values(daily_summary),
-    product_wise: Object.values(product_summary),
+    product_wise: Object.values(product_summary).filter(p => (isMilkEnabled || p.category !== 'milk')),
     apartment_wise: Object.values(apartment_summary)
   };
 }
@@ -1698,6 +1819,146 @@ async function saveApartmentLead({ apartment_id, phone }) {
   return { success: true, apartment_id: aptId, phone: cleanPhone };
 }
 
+// 9. SERVICES (Admin Feature Flags: fish, mutton, milk)
+async function getServices(onlyEnabled = false) {
+  if (await testMySQL()) {
+    try {
+      let sql = 'SELECT id, category, name, description, enabled, sort_order FROM services';
+      if (onlyEnabled) sql += ' WHERE enabled = 1';
+      sql += ' ORDER BY sort_order ASC';
+      const [rows] = await pool.query(sql);
+      return rows.map(r => ({ ...r, enabled: Boolean(r.enabled) }));
+    } catch (err) {
+      // Fallback if table not ready
+    }
+  }
+  const list = memoryStore.services || [];
+  return list
+    .filter(s => !onlyEnabled || Boolean(s.enabled))
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    .map(s => ({ ...s, enabled: Boolean(s.enabled) }));
+}
+
+async function isCategoryEnabled(category) {
+  if (await testMySQL()) {
+    try {
+      const [rows] = await pool.query('SELECT enabled FROM services WHERE category = ?', [category]);
+      if (rows.length > 0) return Boolean(rows[0].enabled);
+      return false;
+    } catch (e) {
+      // Fallback
+    }
+  }
+  const s = (memoryStore.services || []).find(srv => srv.category === category);
+  return s ? Boolean(s.enabled) : false;
+}
+
+async function updateService(category, { enabled, name, description }) {
+  const isEnabled = enabled !== undefined ? (enabled ? 1 : 0) : undefined;
+  if (await testMySQL()) {
+    try {
+      const updates = [];
+      const params = [];
+      if (isEnabled !== undefined) { updates.push('enabled = ?'); params.push(isEnabled); }
+      if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+      if (description !== undefined) { updates.push('description = ?'); params.push(description); }
+      if (updates.length > 0) {
+        params.push(category);
+        await pool.query(`UPDATE services SET ${updates.join(', ')} WHERE category = ?`, params);
+      }
+      const [rows] = await pool.query('SELECT * FROM services WHERE category = ?', [category]);
+      if (rows.length > 0) return { ...rows[0], enabled: Boolean(rows[0].enabled) };
+    } catch (err) {
+      // Fallback
+    }
+  }
+  const s = (memoryStore.services || []).find(srv => srv.category === category);
+  if (!s) throw new Error(`Service ${category} not found`);
+  if (isEnabled !== undefined) s.enabled = isEnabled;
+  if (name !== undefined) s.name = name;
+  if (description !== undefined) s.description = description;
+  return { ...s, enabled: Boolean(s.enabled) };
+}
+
+// 10. SETTINGS (Operational Rules: cut-off time, delivery slots, min order, fee)
+async function getSettings() {
+  const defaultSettings = {
+    order_cutoff_time: '21:00',
+    allow_sameday_orders: 'false',
+    delivery_slots: JSON.stringify(['Morning (7:00 AM - 10:00 AM)', 'Evening (5:00 PM - 8:00 PM)']),
+    min_order_amount: '0',
+    delivery_charge: '0'
+  };
+
+  if (await testMySQL()) {
+    try {
+      const [rows] = await pool.query('SELECT `key`, `value` FROM settings');
+      const result = { ...defaultSettings };
+      rows.forEach(r => {
+        result[r.key] = r.value;
+      });
+      return result;
+    } catch (err) {
+      // Fallback
+    }
+  }
+  return { ...defaultSettings, ...(memoryStore.settings || {}) };
+}
+
+async function updateSettings(settingsMap) {
+  if (!settingsMap || typeof settingsMap !== 'object') throw new Error('Settings object required');
+  if (await testMySQL()) {
+    try {
+      for (const [key, value] of Object.entries(settingsMap)) {
+        const valStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        await pool.query(
+          'INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
+          [key, valStr]
+        );
+      }
+    } catch (err) {
+      // Fallback
+    }
+  }
+  if (!memoryStore.settings) memoryStore.settings = {};
+  for (const [key, value] of Object.entries(settingsMap)) {
+    memoryStore.settings[key] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  }
+  return getSettings();
+}
+
+// 11. SERVICE LEADS (Waitlist for disabled services like milk)
+async function saveServiceLead({ service_category, phone }) {
+  const cleanPhone = (phone || '').replace(/[^0-9]/g, '').slice(-10);
+  if (!cleanPhone || cleanPhone.length !== 10) throw new Error('Valid 10-digit phone required');
+  const cat = (service_category || 'milk').toLowerCase().trim();
+
+  if (await testMySQL()) {
+    try {
+      await pool.query(
+        `INSERT INTO service_leads (service_category, phone) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE phone = VALUES(phone)`,
+        [cat, cleanPhone]
+      );
+      return { success: true, service_category: cat, phone: cleanPhone };
+    } catch (err) {
+      // Fallback
+    }
+  }
+
+  if (!memoryStore.service_leads) memoryStore.service_leads = [];
+  const exists = memoryStore.service_leads.some(l => l.service_category === cat && l.phone === cleanPhone);
+  if (!exists) {
+    memoryStore.service_leads.push({
+      id: memoryStore.service_leads.length + 1,
+      service_category: cat,
+      phone: cleanPhone,
+      created_at: new Date().toISOString()
+    });
+  }
+  return { success: true, service_category: cat, phone: cleanPhone };
+}
+
 module.exports = {
   isMySQLConnected,
   getProducts,
@@ -1728,5 +1989,11 @@ module.exports = {
   createApartment,
   updateApartment,
   deleteApartment,
-  saveApartmentLead
+  saveApartmentLead,
+  getServices,
+  updateService,
+  isCategoryEnabled,
+  getSettings,
+  updateSettings,
+  saveServiceLead
 };

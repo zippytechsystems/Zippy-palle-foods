@@ -15,6 +15,7 @@ export default function CartDrawer({
   onClearCart,
   apartment,
   customer,
+  settings,
   onOpenDeliveryDetails,
   onOrderPlacedSuccess,
   showToast,
@@ -22,11 +23,29 @@ export default function CartDrawer({
 }) {
   const t = translations[lang];
 
+  // Operational cut-off calculation (IST)
+  const cutoffTime = settings?.order_cutoff_time || '21:00';
+  const istFormatter = new Intl.DateTimeFormat('en-GB', { 
+    timeZone: 'Asia/Kolkata', 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: false 
+  });
+  const currentISTTime = istFormatter.format(new Date());
+  const isPastCutoff = currentISTTime >= cutoffTime;
+
+  const getISTDate = (offsetDays = 0) => {
+    const d = new Date(Date.now() + offsetDays * 86400000);
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+  };
+
+  const todayStr = getISTDate(0);
+  const tomorrowStr = getISTDate(1);
+  const dayAfterTomorrowStr = getISTDate(2);
+
   // Steps: 'cart' -> 'confirm' -> 'success'
   const [step, setStep] = useState('cart');
-  const [deliveryDate, setDeliveryDate] = useState(
-    new Date(Date.now() + 86400000).toISOString().split('T')[0] // Default tomorrow morning
-  );
+  const [deliveryDate, setDeliveryDate] = useState(() => (isPastCutoff ? dayAfterTomorrowStr : tomorrowStr));
   const [deliverySlot, setDeliverySlot] = useState('morning');
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod'
   const [notes, setNotes] = useState('');
@@ -37,11 +56,29 @@ export default function CartDrawer({
   if (!isOpen) return null;
 
   const totalAmount = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const deliveryCharge = Number(settings?.delivery_charge || 0);
+  const finalPayable = totalAmount + deliveryCharge;
+  const minOrder = Number(settings?.min_order_amount || 0);
 
   const handleProceedToReview = () => {
     setOrderError('');
     if (cart.length === 0) {
       showToast('Your cart is empty', 'error');
+      return;
+    }
+
+    if (minOrder > 0 && totalAmount < minOrder) {
+      showToast(`Minimum order amount is ₹${minOrder}. Please add more items.`, 'error');
+      return;
+    }
+
+    if (deliveryDate === tomorrowStr && isPastCutoff) {
+      showToast(`Orders for tomorrow closed at 9:00 PM. Please select ${dayAfterTomorrowStr} or later.`, 'error');
+      return;
+    }
+
+    if (deliveryDate === todayStr && !settings?.allow_same_day_orders) {
+      showToast('Same-day delivery is not permitted. Please order for tomorrow or later.', 'error');
       return;
     }
 
@@ -187,6 +224,17 @@ export default function CartDrawer({
                 </span>
               </div>
 
+              {/* Cut-off Notice Banner */}
+              {isPastCutoff && (
+                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-start space-x-2">
+                  <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Next-day cut-off passed: </span>
+                    <span>Daily orders close at 9:00 PM. Delivering on next available date ({dayAfterTomorrowStr}).</span>
+                  </div>
+                </div>
+              )}
+
               {/* Date Selection */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1 flex items-center space-x-1">
@@ -196,25 +244,29 @@ export default function CartDrawer({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setDeliveryDate(new Date(Date.now() + 86400000).toISOString().split('T')[0])}
+                    disabled={isPastCutoff}
+                    onClick={() => setDeliveryDate(tomorrowStr)}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
-                      deliveryDate !== new Date().toISOString().split('T')[0]
+                      isPastCutoff
+                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed line-through'
+                        : deliveryDate === tomorrowStr
                         ? 'bg-[#1b4332] text-white border-[#1b4332]'
                         : 'bg-gray-50 text-gray-700 border-gray-200'
                     }`}
                   >
-                    {t.common.preorderTomorrow}
+                    {isPastCutoff ? 'Tomorrow (Closed)' : t.common.preorderTomorrow}
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => setDeliveryDate(new Date().toISOString().split('T')[0])}
+                    onClick={() => setDeliveryDate(dayAfterTomorrowStr)}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
-                      deliveryDate === new Date().toISOString().split('T')[0]
+                      deliveryDate === dayAfterTomorrowStr
                         ? 'bg-[#1b4332] text-white border-[#1b4332]'
                         : 'bg-gray-50 text-gray-700 border-gray-200'
                     }`}
                   >
-                    {t.common.deliverToday}
+                    {dayAfterTomorrowStr} (Next Day)
                   </button>
                 </div>
 
@@ -223,24 +275,24 @@ export default function CartDrawer({
                   <button
                     type="button"
                     onClick={() => setDeliverySlot('morning')}
-                    className={`py-1.5 px-2 rounded-xl text-[11px] font-semibold border transition ${
+                    className={`py-2 px-2 rounded-xl text-[11px] font-semibold border transition ${
                       deliverySlot === 'morning'
                         ? 'bg-[#e8f5e9] text-[#1b4332] border-[#2d6a4f] font-bold'
                         : 'bg-gray-50 text-gray-600 border-gray-200'
                     }`}
                   >
-                    {t.common.morningSlot}
+                    Morning (7:00 AM - 10:00 AM)
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeliverySlot('evening')}
-                    className={`py-1.5 px-2 rounded-xl text-[11px] font-semibold border transition ${
+                    className={`py-2 px-2 rounded-xl text-[11px] font-semibold border transition ${
                       deliverySlot === 'evening'
                         ? 'bg-[#e8f5e9] text-[#1b4332] border-[#2d6a4f] font-bold'
                         : 'bg-gray-50 text-gray-600 border-gray-200'
                     }`}
                   >
-                    {t.common.eveningSlot}
+                    Evening (5:00 PM - 8:00 PM)
                   </button>
                 </div>
               </div>
@@ -264,11 +316,13 @@ export default function CartDrawer({
                 </div>
                 <div className="flex justify-between text-emerald-700">
                   <span>{t.common.deliveryFee}</span>
-                  <span className="font-bold">{t.common.freeDelivery}</span>
+                  <span className="font-bold">
+                    {deliveryCharge > 0 ? `₹${deliveryCharge}` : t.common.freeDelivery}
+                  </span>
                 </div>
                 <div className="flex justify-between text-base font-extrabold text-[#1b4332] pt-2 border-t border-gray-100">
                   <span>{t.common.toPay}</span>
-                  <span>₹{totalAmount.toFixed(0)}</span>
+                  <span>₹{finalPayable.toFixed(0)}</span>
                 </div>
               </div>
 
@@ -279,7 +333,7 @@ export default function CartDrawer({
                   onClick={handleProceedToReview}
                   className="w-full py-3.5 bg-[#2d6a4f] hover:bg-[#1b4332] text-white rounded-2xl text-xs font-extrabold uppercase tracking-wider shadow-md transition active:scale-[0.99]"
                 >
-                  {customer && customer.phone ? 'Review & Confirm Order' : 'Enter Details & Checkout'}
+                  {customer && customer.phone ? `Review & Confirm (₹${finalPayable.toFixed(0)})` : 'Enter Details & Checkout'}
                 </button>
               </div>
             </div>
@@ -322,7 +376,7 @@ export default function CartDrawer({
               <div>
                 <span className="text-[10px] uppercase font-bold text-emerald-900 block">Scheduled Delivery</span>
                 <span className="font-extrabold text-[#1b4332] text-sm">
-                  {deliveryDate} ({deliverySlot === 'morning' ? 'Morning 6:00 - 8:00 AM' : 'Evening 4:00 - 6:00 PM'})
+                  {deliveryDate} ({deliverySlot === 'morning' ? 'Morning (7:00 AM - 10:00 AM)' : 'Evening (5:00 PM - 8:00 PM)'})
                 </span>
               </div>
               <Clock className="w-5 h-5 text-[#2d6a4f]" />
@@ -358,7 +412,7 @@ export default function CartDrawer({
                   <div className="text-[10px] text-amber-700">Pay after inspecting your fresh order at your doorstep.</div>
                 </div>
               </div>
-              <span className="font-extrabold text-sm text-[#1b4332]">₹{totalAmount.toFixed(0)}</span>
+              <span className="font-extrabold text-sm text-[#1b4332]">₹{finalPayable.toFixed(0)}</span>
             </div>
 
             {/* Confirm Actions */}
@@ -377,7 +431,7 @@ export default function CartDrawer({
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                    <span>Confirm Order (₹{totalAmount.toFixed(0)})</span>
+                    <span>Confirm Order (₹{finalPayable.toFixed(0)})</span>
                   </>
                 )}
               </button>
@@ -418,7 +472,7 @@ export default function CartDrawer({
               <div className="flex justify-between">
                 <span className="text-gray-500">Delivery Slot:</span>
                 <span className="font-bold text-emerald-800">
-                  {placedOrder.delivery_date} ({placedOrder.delivery_slot === 'morning' ? '6:00 - 8:00 AM' : 'Evening'})
+                  {placedOrder.delivery_date} ({placedOrder.delivery_slot === 'morning' ? 'Morning (7:00 AM - 10:00 AM)' : 'Evening (5:00 PM - 8:00 PM)'})
                 </span>
               </div>
               <div className="flex justify-between">

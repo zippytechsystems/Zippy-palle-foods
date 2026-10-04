@@ -98,6 +98,9 @@ app.use(express.json({ limit: '100kb' }));
 // Feature Flags
 const OTP_ENABLED = process.env.OTP_ENABLED === 'true'; // Disabled by default for frictionless order flow
 
+// Trust proxy before rate limiters
+app.set('trust proxy', 1);
+
 // Rate Limiters
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -556,9 +559,94 @@ app.delete('/api/admin/apartments/:id', authenticateAdmin, async (req, res) => {
   }
 });
 
+// 9. Services & Feature Flags (Admin only)
+app.get('/api/admin/services', authenticateAdmin, async (req, res) => {
+  try {
+    const services = await db.getServices(false);
+    res.json(services);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/services', authenticateAdmin, async (req, res) => {
+  try {
+    const { category, enabled, name, description } = req.body || {};
+    if (!category) return res.status(400).json({ error: 'Service category is required' });
+    const updated = await db.updateService(category, { enabled, name, description });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/services/:category', authenticateAdmin, async (req, res) => {
+  try {
+    const { enabled, name, description } = req.body || {};
+    const updated = await db.updateService(req.params.category, { enabled, name, description });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 10. Operational Settings (Admin only)
+app.get('/api/admin/settings', authenticateAdmin, async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/settings', authenticateAdmin, async (req, res) => {
+  try {
+    const updated = await db.updateSettings(req.body);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================================
 // CUSTOMER APIS (Public / Protected)
 // ============================================================================
+app.get('/api/services', async (req, res) => {
+  try {
+    const services = await db.getServices(true);
+    res.json(services);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/services/notify', async (req, res) => {
+  try {
+    const { service_category, phone } = req.body || {};
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+    const cleanPhone = phone.replace(/[^0-9]/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      return res.status(400).json({ error: 'Valid 10-digit mobile number required' });
+    }
+    const lead = await db.saveServiceLead({ service_category: service_category || 'milk', phone: cleanPhone });
+    res.json({ success: true, message: 'We will WhatsApp you as soon as this service launches!', lead });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/apartments', async (req, res) => {
   try {
     const apartments = await db.getPublicApartments();
@@ -750,20 +838,62 @@ app.post('/api/orders', orderPlacementLimiter, async (req, res) => {
       return res.status(400).json({ error: 'At least one product item is required to place an order.' });
     }
 
-    // Validate products exist in catalog
-    const validProds = await db.getProducts();
-    const validProdMap = {};
-    validProds.forEach(p => { validProdMap[p.id] = p; });
+    // Validate products exist in catalog and their category is enabled
+    const allProds = await db.getProducts(true);
+    const prodMap = {};
+    allProds.forEach(p => { prodMap[p.id] = p; });
 
     for (const it of items) {
-      if (!it.product_id || !validProdMap[it.product_id]) {
+      const prod = prodMap[it.product_id];
+      if (!it.product_id || !prod) {
         return res.status(400).json({ 
           error: `Invalid product: ${it.name || it.product_id}. Only village fresh milk, fish, and mutton are available.` 
         });
       }
+      const isEnabled = await db.isCategoryEnabled(prod.category);
+      if (!isEnabled) {
+        return res.status(400).json({ error: 'This service is not available yet' });
+      }
       if (Number(it.quantity) <= 0) {
         return res.status(400).json({ error: 'Product quantity must be greater than zero.' });
       }
+    }
+
+    // Operational order rules (Cut-off time & min order amount)
+    const settings = await db.getSettings();
+    const cutoffTime = settings.order_cutoff_time || '21:00';
+    const allowSameDay = String(settings.allow_sameday_orders).toLowerCase() === 'true';
+    const minOrderAmount = parseFloat(settings.min_order_amount || '0');
+
+    const targetDateStr = delivery_date || new Date().toISOString().split('T')[0];
+
+    // Check against current IST (Asia/Kolkata) date and time
+    const now = new Date();
+    const istDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const todayIST = istDateFormatter.format(now);
+    const tomorrowDate = new Date(now.getTime() + 86400000);
+    const tomorrowIST = istDateFormatter.format(tomorrowDate);
+
+    if (targetDateStr === todayIST && !allowSameDay) {
+      return res.status(400).json({ error: 'Same-day orders are not available. Orders for tomorrow close at 9:00 PM today.' });
+    }
+
+    if (targetDateStr === tomorrowIST) {
+      const istTimeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+      const currentISTTime = istTimeFormatter.format(now);
+      if (currentISTTime >= cutoffTime) {
+        return res.status(400).json({ error: `Orders for tomorrow closed at ${cutoffTime}. Please choose a later delivery date.` });
+      }
+    }
+
+    // Check minimum order amount
+    const orderTotal = items.reduce((sum, it) => {
+      const price = Number(it.price || it.unit_price || (prodMap[it.product_id] && prodMap[it.product_id].price) || 0);
+      return sum + (Number(it.quantity) * price);
+    }, 0);
+
+    if (minOrderAmount > 0 && orderTotal < minOrderAmount) {
+      return res.status(400).json({ error: `Minimum order amount is ₹${minOrderAmount}.` });
     }
 
     // Cash on Delivery only for now (OTP_ENABLED=false), keep a hook for UPI/Razorpay later
@@ -776,7 +906,7 @@ app.post('/api/orders', orderPlacementLimiter, async (req, res) => {
       apartment_name: apt.name,
       block_wing: block_wing || customer.block_wing || 'A',
       flat_number: flat_number || customer.flat_number,
-      delivery_date: delivery_date || new Date().toISOString().split('T')[0],
+      delivery_date: targetDateStr,
       delivery_slot: delivery_slot === 'evening' ? 'evening' : 'morning',
       items,
       payment_method: selectedPaymentMethod,
@@ -792,6 +922,11 @@ app.post('/api/orders', orderPlacementLimiter, async (req, res) => {
 // Create Subscription (Milk)
 app.post('/api/subscriptions', async (req, res) => {
   try {
+    const isMilkEnabled = await db.isCategoryEnabled('milk');
+    if (!isMilkEnabled) {
+      return res.status(400).json({ error: 'This service is not available yet' });
+    }
+
     const { customer_id, litres, frequency } = req.body;
     const customerKey = req.headers['x-customer-key'] || req.body?.customer_key;
     let customer = null;

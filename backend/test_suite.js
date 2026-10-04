@@ -247,17 +247,27 @@ async function runTestSuite() {
     }
     console.log('✅ [4] Rate limit passed: 5 failed attempts triggered 429 "Try again later".');
 
-    // 2h: End-to-end Customer & Operations flow
-    console.log('\n--- TEST GROUP 5: AUTH-LESS CUSTOMER & OPERATIONS FLOW ---');
-    // Catalog strictly 3 services
+    // 2h: End-to-end Customer & Operations flow (Phase 1: Fish & Mutton live, Milk postponed)
+    console.log('\n--- TEST GROUP 5: PHASE 1 LAUNCH & SERVICE FLAGS VALIDATION ---');
+    
+    // 5a: Catalog check: strictly enabled categories (Fish & Mutton live, Milk postponed)
     const prods = await request({ host: 'localhost', port: TEST_PORT, path: '/api/products', method: 'GET' });
-    const disallowed = prods.data.filter(p => !['milk', 'fish', 'mutton'].includes(p.category));
-    if (disallowed.length > 0 || prods.data.length !== 6) {
-      throw new Error('Disallowed products found in catalog');
+    const disallowed = prods.data.filter(p => !['fish', 'mutton'].includes(p.category));
+    if (disallowed.length > 0) {
+      throw new Error(`Disallowed categories found in Phase 1 catalog: ${JSON.stringify(disallowed)}`);
     }
-    console.log('✅ [5a] Catalog check: Strictly 3 services (Morning Health Milk, Fresh Village Fish, Fresh Village Mutton).');
+    const hasMilk = prods.data.some(p => p.category === 'milk');
+    if (hasMilk) {
+      throw new Error('Morning Health Milk should be hidden in Phase 1 /api/products');
+    }
+    const hasLiver = prods.data.some(p => p.id === 'prod-mut-liver');
+    const hasPaya = prods.data.some(p => p.id === 'prod-mut-paya');
+    if (!hasLiver || !hasPaya) {
+      throw new Error('New mutton cuts (Liver, Paya) missing from catalog');
+    }
+    console.log('✅ [5a] Phase 1 Catalog verified: ONLY Fresh Village Fish & Mutton are live. Milk is hidden.');
 
-    // Customer registration / upsert by phone
+    // 5b: Customer registration / upsert by phone
     const randPhone = '98' + Math.floor(10000000 + Math.random() * 90000000);
     const custRes = await request({
       host: 'localhost', port: TEST_PORT, path: '/api/customers', method: 'POST',
@@ -276,7 +286,47 @@ async function runTestSuite() {
     const customerId = custRes.data.id;
     console.log('✅ [5b] Customer delivery details saved: customer_key (UUID v4) generated.');
 
-    // Customer place order with customer_key
+    // 5c: Attempt ordering disabled category (Milk) -> Must reject with 400 "This service is not available yet"
+    const targetDeliveryDate = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
+    const milkOrderAttempt = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/orders', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
+    }, {
+      apartment_name: 'Shneha Apartment',
+      delivery_date: targetDeliveryDate,
+      delivery_slot: 'morning',
+      items: [
+        { product_id: 'prod-milk-morning', name: 'Morning Health Milk', quantity: 1, unit: 'Litre', price: 90 }
+      ]
+    });
+    if (milkOrderAttempt.status !== 400 || !milkOrderAttempt.data.error.includes('This service is not available yet')) {
+      throw new Error(`Expected 400 'This service is not available yet' for milk order, got: ${JSON.stringify(milkOrderAttempt)}`);
+    }
+
+    // Attempt milk subscription -> Must reject with 400 "This service is not available yet"
+    const milkSubAttempt = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/subscriptions', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
+    }, {
+      litres: 1,
+      frequency: 'daily'
+    });
+    if (milkSubAttempt.status !== 400 || !milkSubAttempt.data.error.includes('This service is not available yet')) {
+      throw new Error(`Expected 400 'This service is not available yet' for milk sub, got: ${JSON.stringify(milkSubAttempt)}`);
+    }
+    console.log('✅ [5c] Disabled service enforcement: Rejected milk order & subscription with 400 "This service is not available yet".');
+
+    // 5d: Waitlist lead notification for coming-soon service
+    const notifyLeadRes = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/services/notify', method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }, { service_category: 'milk', phone: randPhone });
+    if (notifyLeadRes.status !== 200 || !notifyLeadRes.data.success) {
+      throw new Error(`Failed to save service lead: ${JSON.stringify(notifyLeadRes)}`);
+    }
+    console.log('✅ [5d] Coming-soon service waitlist: Customer saved for WhatsApp launch notification.');
+
+    // 5e: Fish and Mutton orders work
     const orderRes = await request({
       host: 'localhost', port: TEST_PORT, path: '/api/orders', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
@@ -284,30 +334,66 @@ async function runTestSuite() {
       apartment_name: 'Shneha Apartment',
       block_wing: 'Block B',
       flat_number: 'Flat 204',
-      delivery_date: new Date().toISOString().split('T')[0],
-      delivery_slot: 'Morning (6:30 AM - 8:00 AM)',
+      delivery_date: targetDeliveryDate,
+      delivery_slot: 'Morning (7:00 AM - 10:00 AM)',
       payment_method: 'COD',
       items: [
-        { product_id: 'prod-fish-rohu', product_name: 'Singur Reservoir Rohu Fish', quantity: 1, unit: 'kg', unit_price: 280, cutting_preference: 'curry cut' }
+        { product_id: 'prod-fish-rohu', name: 'Rohu Fish', quantity: 1, unit: 'kg', price: 240, cutting_instructions: 'Curry Cut Steaks' },
+        { product_id: 'prod-mut-keema', name: 'Mutton Keema', quantity: 0.5, unit: 'kg', price: 920, cutting_instructions: 'Hand-minced keema' }
       ]
     });
     if (orderRes.status !== 200 || !orderRes.data.id) {
-      throw new Error(`Customer order failed: ${JSON.stringify(orderRes)}`);
+      throw new Error(`Customer fish/mutton order failed: ${JSON.stringify(orderRes)}`);
     }
     const orderId = orderRes.data.id;
-    console.log(`✅ [5c] Customer order placed with COD: Order ID ${orderId}.`);
+    console.log(`✅ [5e] Customer fish & mutton order successfully placed with COD: Order ID ${orderId}.`);
 
-    // Customer rates order via customer route (no admin route)
+    // 5f: Admin Service Flags Toggle: Enable milk via Admin API and verify it appears and becomes orderable
+    const enableMilkRes = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/admin/services', method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }
+    }, { category: 'milk', enabled: true });
+    if (enableMilkRes.status !== 200 || !enableMilkRes.data.enabled) {
+      throw new Error(`Admin service enable failed: ${JSON.stringify(enableMilkRes)}`);
+    }
+
+    // Verify milk now appears in /api/products
+    const prodsAfterEnable = await request({ host: 'localhost', port: TEST_PORT, path: '/api/products', method: 'GET' });
+    const milkNowVisible = prodsAfterEnable.data.some(p => p.category === 'milk');
+    if (!milkNowVisible) {
+      throw new Error('Morning Health Milk should now be visible after admin enabled it');
+    }
+
+    // Verify milk subscription now succeeds
+    const milkSubSuccess = await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/subscriptions', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
+    }, {
+      litres: 1,
+      frequency: 'daily'
+    });
+    if (milkSubSuccess.status !== 200 || !milkSubSuccess.data.id) {
+      throw new Error(`Milk subscription failed after enabling: ${JSON.stringify(milkSubSuccess)}`);
+    }
+    console.log('✅ [5f] Admin Service Flag toggle: Enabled milk via PUT /api/admin/services; milk appeared and was subscribed.');
+
+    // Restore milk to disabled for Phase 1 launch
+    await request({
+      host: 'localhost', port: TEST_PORT, path: '/api/admin/services', method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }
+    }, { category: 'milk', enabled: false });
+
+    // 5g: Customer rates order via customer route
     const rateRes = await request({
       host: 'localhost', port: TEST_PORT, path: `/api/customer/orders/${orderId}/rate`, method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Customer-Key': customerKey }
-    }, { rating: 5, feedback: 'Delicious Singur fish!' });
+    }, { rating: 5, feedback: 'Delicious fresh fish and mutton!' });
     if (rateRes.status !== 200) {
       throw new Error(`Customer rate order failed: ${JSON.stringify(rateRes)}`);
     }
-    console.log('✅ [5d] Customer order feedback submitted via customer endpoint.');
+    console.log('✅ [5g] Customer order feedback submitted via customer endpoint.');
 
-    // Admin blocks customer
+    // 5h: Admin blocks customer
     const blockRes = await request({
       host: 'localhost', port: TEST_PORT, path: `/api/admin/customers/${customerId}`, method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }
@@ -324,15 +410,15 @@ async function runTestSuite() {
       apartment_name: 'Shneha Apartment',
       block_wing: 'Block B',
       flat_number: 'Flat 204',
-      delivery_date: new Date().toISOString().split('T')[0],
-      delivery_slot: 'Morning (6:30 AM - 8:00 AM)',
+      delivery_date: targetDeliveryDate,
+      delivery_slot: 'Morning (7:00 AM - 10:00 AM)',
       payment_method: 'COD',
-      items: [{ product_id: 'prod-fish-rohu', product_name: 'Singur Reservoir Rohu Fish', quantity: 1, unit: 'kg', unit_price: 280 }]
+      items: [{ product_id: 'prod-fish-rohu', name: 'Rohu Fish', quantity: 1, unit: 'kg', price: 240 }]
     });
     if (blockedAttempt.status !== 403 || !blockedAttempt.data.error.includes('Please contact Palle Natural Foods')) {
       throw new Error(`Expected 403 for blocked customer, got ${JSON.stringify(blockedAttempt)}`);
     }
-    console.log('✅ [5e] Admin customer blocking enforced: Blocked customer gets 403 "Please contact Palle Natural Foods".');
+    console.log('✅ [5h] Admin customer blocking enforced: Blocked customer gets 403 "Please contact Palle Natural Foods".');
 
     console.log('\n================================================================');
     console.log('🎉 ALL HARDENED ADMIN & API SECURITY TESTS PASSED (100% GREEN)!');

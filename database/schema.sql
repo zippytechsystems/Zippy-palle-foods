@@ -14,6 +14,9 @@ DROP TABLE IF EXISTS `subscriptions`;
 DROP TABLE IF EXISTS `rate_history`;
 DROP TABLE IF EXISTS `products`;
 DROP TABLE IF EXISTS `apartment_leads`;
+DROP TABLE IF EXISTS `service_leads`;
+DROP TABLE IF EXISTS `services`;
+DROP TABLE IF EXISTS `settings`;
 DROP TABLE IF EXISTS `customers`;
 DROP TABLE IF EXISTS `apartments`;
 DROP TABLE IF EXISTS `alerts`;
@@ -175,3 +178,34 @@ CREATE TABLE `otp_codes` (
     PRIMARY KEY (`id`),
     KEY `idx_otp_phone` (`phone`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 9. SERVICES TABLE (Admin Feature Flags: fish, mutton, milk)
+CREATE TABLE `services` (
+    `id` VARCHAR(50) NOT NULL,
+    `category` VARCHAR(50) NOT NULL UNIQUE,
+    `name` VARCHAR(120) NOT NULL,
+    `description` TEXT,
+    `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+    `sort_order` INT DEFAULT 0,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 10. SETTINGS TABLE (Operational Order Rules: cut-off time, delivery slots, min order, fee)
+CREATE TABLE `settings` (
+    `key` VARCHAR(100) NOT NULL,
+    `value` TEXT NOT NULL,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11. SERVICE LEADS TABLE (Waitlist for disabled / coming-soon services like milk)
+CREATE TABLE `service_leads` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `service_category` VARCHAR(50) NOT NULL,
+    `phone` VARCHAR(20) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `unique_service_lead` (`service_category`, `phone`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

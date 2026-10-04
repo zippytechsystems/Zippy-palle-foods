@@ -9,7 +9,8 @@ import {
   getRates, 
   getOrders, 
   getSubscriptions,
-  getAdminApartments
+  getAdminApartments,
+  getAdminServices
 } from './api';
 import { translations } from './translations';
 
@@ -40,6 +41,11 @@ export default function App() {
   // App data state
   const [activeSection, setActiveSection] = useState('rates');
   const [rates, setRates] = useState([]);
+  const [services, setServices] = useState([
+    { category: 'fish', enabled: true },
+    { category: 'mutton', enabled: true },
+    { category: 'milk', enabled: false }
+  ]);
   const [ordersData, setOrdersData] = useState(null);
   const [subsData, setSubsData] = useState(null);
   const [apartments, setApartments] = useState([]);
@@ -112,20 +118,32 @@ export default function App() {
   const loadData = useCallback(async () => {
     if (!getToken()) return;
     try {
-      const [ratesRes, ordersRes, subsRes, aptsRes] = await Promise.all([
+      const [ratesRes, ordersRes, subsRes, aptsRes, srvsRes] = await Promise.all([
         getRates(),
         getOrders(),
         getSubscriptions(),
-        getAdminApartments().catch(() => [])
+        getAdminApartments().catch(() => []),
+        getAdminServices().catch(() => [])
       ]);
       setRates(ratesRes);
       setOrdersData(ordersRes);
       setSubsData(subsRes);
       setApartments(aptsRes || []);
+      if (Array.isArray(srvsRes) && srvsRes.length > 0) {
+        setServices(srvsRes);
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     }
   }, []);
+
+  // If milk is disabled and currently on subscriptions tab, fallback to rates
+  useEffect(() => {
+    const isMilkEnabled = services.some(s => s.category === 'milk' && (s.enabled === 1 || s.enabled === true));
+    if (!isMilkEnabled && activeSection === 'subscriptions') {
+      setActiveSection('rates');
+    }
+  }, [services, activeSection]);
 
   // Initial load
   useEffect(() => {
@@ -323,6 +341,7 @@ export default function App() {
           ordersCount={ordersData?.total_orders || 0}
           subsCount={subsData?.total_active || 0}
           onLogout={handleLogout}
+          services={services}
         />
 
         {/* Dynamic Main Workspace */}
@@ -339,6 +358,8 @@ export default function App() {
                   onRateUpdated={loadData}
                   showToast={showToast}
                   lang={lang}
+                  services={services}
+                  onServicesUpdated={loadData}
                 />
               )}
 

@@ -3,9 +3,9 @@
 export const translations = {
   en: {
     brandName: 'Palle Natural Foods',
-    tagline: 'Pure Village Freshness • HMT Nagar, Hyderabad',
-    slogan: 'Morning Health Milk • Fresh Village Fish • Fresh Village Mutton',
-    only3Notice: 'Strictly 3 Pure Services. Zero vegetables, groceries, or frozen foods.',
+    tagline: 'Fresh Village Fish & Mutton • HMT Nagar, Hyderabad',
+    slogan: 'Fresh Village Fish & Fresh Village Mutton',
+    only3Notice: 'Phase 1 Launch: Fresh Village Fish & Mutton only. Morning Health Milk coming soon.',
     nav: {
       store: 'Fresh Store',
       milk: 'Daily Milk',
@@ -15,11 +15,13 @@ export const translations = {
     },
     services: {
       milkTitle: 'Morning Health Milk',
-      milkDesc: 'Raw unpasteurized A2 Desi cow & buffalo milk sourced at dawn from Siddipet & Gajwel. Delivered 6:00 – 8:00 AM.',
+      milkComingSoon: 'Morning Health Milk - Coming Soon',
+      milkComingSoonDesc: 'Pure raw unpasteurized A2 Desi cow & buffalo milk from Siddipet & Gajwel farmers. Postponed for Phase 1. Click below to be notified as soon as milk deliveries launch!',
+      milkDesc: 'Raw unpasteurized A2 Desi cow & buffalo milk sourced at dawn from Siddipet & Gajwel. Delivered 7:00 – 10:00 AM.',
       fishTitle: 'Fresh Village Fish',
-      fishDesc: 'Freshwater pond fish (Rohu & Katla) from Singur tanks. Free descaling and sliced into neat curry cut steaks.',
+      fishDesc: 'Freshwater pond fish (Rohu & Katla) from Telangana irrigation tanks. Cleaned, cut to order.',
       muttonTitle: 'Fresh Village Mutton',
-      muttonDesc: 'Pasture-grazed sheep from Alair shepherds. Cleaned in natural turmeric water, zero frozen meat.'
+      muttonDesc: 'Grass-fed village sheep from Alair pastoralists. Washed in natural turmeric water, zero frozen meat.'
     },
     common: {
       currency: '₹',
@@ -28,7 +30,7 @@ export const translations = {
       soldOut: 'Sold Out',
       available: 'Fresh Stock Available',
       todayPrice: "Today's Village Rate",
-      weight: 'Select Weight / Quantity',
+      weight: 'Select Weight',
       cutOption: 'Select Cut / Cleaning Type',
       login: 'Login with Mobile',
       logout: 'Log Out',
@@ -41,8 +43,8 @@ export const translations = {
       preorderTomorrow: 'Pre-order for Tomorrow',
       deliverToday: 'Deliver Today',
       deliverySlot: 'Delivery Slot',
-      morningSlot: 'Morning (6:00 - 8:00 AM)',
-      eveningSlot: 'Evening (4:00 - 6:00 PM)',
+      morningSlot: 'Morning (7:00 AM - 10:00 AM)',
+      eveningSlot: 'Evening (5:00 PM - 8:00 PM)',
       paymentMode: 'Payment Mode',
       cod: 'Cash on Delivery (COD)',
       upi: 'Instant UPI on Delivery',
@@ -55,20 +57,21 @@ export const translations = {
     },
     options: {
       fishCuts: {
-        whole: 'Whole Fish (Cleaned & Gutted)',
-        steaks: 'Neat Curry Cut Steaks',
-        headOnly: 'Steaks + Head for Pulusu'
+        whole: 'Whole',
+        cleaned: 'Cleaned',
+        curry: 'Curry Cut'
       },
       muttonCuts: {
-        curry: 'Medium Bone-in Curry Cut',
-        boneless: '100% Boneless Pieces',
-        keema: 'Hand-minced Keema',
-        liver: 'Fresh Liver Mix Cut'
+        curry: 'Curry Cut',
+        boneless: 'Boneless',
+        keema: 'Keema',
+        liver: 'Liver',
+        paya: 'Paya'
       }
     },
     sub: {
       title: 'Daily Morning Milk Subscription',
-      subtitle: 'Fresh raw A2 milk placed outside your flat door between 6:00 – 8:00 AM daily.',
+      subtitle: 'Fresh raw A2 milk placed outside your flat door between 7:00 – 10:00 AM daily.',
       frequency: 'Frequency',
       daily: 'Every Day (Daily)',
       alternate: 'Alternate Days (Every 2nd Day)',
@@ -82,9 +85,9 @@ export const translations = {
   },
   te: {
     brandName: 'పల్లె నేచురల్ ఫుడ్స్',
-    tagline: 'పల్లెటూరి స్వచ్ఛమైన ఉత్పత్తులు • హెచ్‌ఎంటీ నగర్, హైదరాబాద్',
-    slogan: 'ఉదయపు తాజా పాలు • పల్లె చెరువు చేపలు • పల్లెటూరి నాటు మటన్',
-    only3Notice: 'కేవలం 3 స్వచ్ఛమైన సేవలు. కూరగాయలు, నిల్వ ఉంచిన పదార్థాలు ఉండవు.',
+    tagline: 'పల్లెటూరి తాజా చేపలు & నాటు మటన్ • హెచ్‌ఎంటీ నగర్, హైదరాబాద్',
+    slogan: 'పల్లె చెరువు చేపలు • పల్లెటూరి నాటు మటన్',
+    only3Notice: 'మొదటి దశ: పల్లెటూరి తాజా చేపలు & నాటు మటన్ మాత్రమే. పాల సేవ త్వరలో ప్రారంభం.',
     nav: {
       store: 'తాజా స్టోర్',
       milk: 'పాల చందా',
@@ -94,9 +97,11 @@ export const translations = {
     },
     services: {
       milkTitle: 'ఉదయపు తాజా పాలు',
-      milkDesc: 'సిద్దిపేట, గజ్వేల్ రైతుల నుండి తెల్లవారుజామున సేకరించిన స్వచ్ఛమైన A2 పచ్చి పాలు. ఉదయం 6:00 - 8:00 మధ్య డెలివరీ.',
+      milkComingSoon: 'ఉదయపు తాజా పాలు - త్వరలో ప్రారంభం',
+      milkComingSoonDesc: 'సిద్దిపేట & గజ్వేల్ రైతుల నుండి తెల్లవారుజామున సేకరించే స్వచ్ఛమైన A2 పచ్చి పాలు. మొదటి దశలో వాయిదా వేయబడింది. ప్రారంభమైన వెంటనే వాట్సాప్‌లో తెలుసుకోవడానికి నంబర్ నమోదు చేయండి.',
+      milkDesc: 'సిద్దిపేట, గజ్వేల్ రైతుల నుండి స్వచ్ఛమైన A2 పచ్చి పాలు. ఉదయం 7:00 - 10:00 మధ్య డెలివరీ.',
       fishTitle: 'పల్లె చెరువు చేపలు',
-      fishDesc: 'సింగూరు ప్రాజెక్ట్ చెరువుల నుండి రోహు & బొచ్చె (కాట్లా) చేపలు. పొలుసు తీసి శుభ్రంగా ముక్కలు చేసి ఇస్తాము.',
+      fishDesc: 'తెలంగాణ చెరువుల నుండి రోహు & బొచ్చె (కాట్లా) చేపలు. పొలుసు తీసి శుభ్రంగా ముక్కలు చేసి ఇస్తాము.',
       muttonTitle: 'పల్లెటూరి నాటు మటన్',
       muttonDesc: 'ఆలేరు గొర్రెల కాపరుల నుండి తాజా మాంసం. సహజ పసుపు నీటితో కడిగిన ముక్కలు, ఫ్రోజెన్ ఉండదు.'
     },
@@ -120,8 +125,8 @@ export const translations = {
       preorderTomorrow: 'రేపటి కోసం ముందస్తు ఆర్డర్',
       deliverToday: 'ఈరోజు డెలివరీ',
       deliverySlot: 'డెలివరీ సమయం',
-      morningSlot: 'ఉదయం (6:00 - 8:00 గం.)',
-      eveningSlot: 'సాయంత్రం (4:00 - 6:00 గం.)',
+      morningSlot: 'ఉదయం (7:00 - 10:00 గం.)',
+      eveningSlot: 'సాయంత్రం (5:00 - 8:00 గం.)',
       paymentMode: 'చెల్లింపు విధానం',
       cod: 'డెలివరీ సమయంలో నగదు (COD)',
       upi: 'డెలివరీ సమయంలో UPI / స్కానర్',
@@ -134,20 +139,21 @@ export const translations = {
     },
     options: {
       fishCuts: {
-        whole: 'మొత్తం చేప (శుభ్రం చేసినది)',
-        steaks: 'కూర ముక్కలు (స్టీక్స్)',
-        headOnly: 'ముక్కలు + తలకాయ (పులుసు కోసం)'
+        whole: 'మొత్తం చేప (Whole)',
+        cleaned: 'శుభ్రం చేసినది (Cleaned)',
+        curry: 'కూర ముక్కలు (Curry Cut)'
       },
       muttonCuts: {
-        curry: 'ఎముకతో కూడిన కూర ముక్కలు',
-        boneless: 'ఎముక లేని బోన్‌లెస్ ముక్కలు',
-        keema: 'చేతితో కొట్టిన తాజా కీమా',
-        liver: 'తాజా లివర్ కలిపిన ముక్కలు'
+        curry: 'కూర ముక్కలు (Curry Cut)',
+        boneless: 'బోన్‌లెస్ (Boneless)',
+        keema: 'కీమా (Keema)',
+        liver: 'లివర్ (Liver)',
+        paya: 'పాయా (Paya)'
       }
     },
     sub: {
       title: 'రోజూ ఉదయపు పాల చందా (సబ్‌స్క్రిప్షన్)',
-      subtitle: 'ప్రతి ఉదయం 6:00 - 8:00 మధ్య మీ ఫ్లాట్ తలుపు వద్ద తాజా A2 పాలు అందుతాయి.',
+      subtitle: 'ప్రతి ఉదయం 7:00 - 10:00 మధ్య మీ ఫ్లాట్ తలుపు వద్ద తాజా A2 పాలు అందుతాయి.',
       frequency: 'ఎలా కావాలి',
       daily: 'ప్రతిరోజూ (డైలీ)',
       alternate: 'రోజు విడిచి రోజు (ఆల్టర్నేట్)',

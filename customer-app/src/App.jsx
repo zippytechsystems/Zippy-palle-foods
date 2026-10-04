@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   getProducts, 
+  getServices,
+  getSettings,
   getSelectedApartment, 
   setSelectedApartment, 
   getCurrentCustomer, 
@@ -28,6 +30,18 @@ export default function App() {
   const [apartment, setApartmentState] = useState(getSelectedApartment());
   const [customer, setCustomerState] = useState(getCurrentCustomer());
   const [products, setProducts] = useState([]);
+  const [services, setServices] = useState([
+    { category: 'fish', enabled: true },
+    { category: 'mutton', enabled: true },
+    { category: 'milk', enabled: false }
+  ]);
+  const [settings, setSettings] = useState({
+    order_cutoff_time: '21:00',
+    delivery_slots: ['Morning (7:00 AM - 10:00 AM)', 'Evening (5:00 PM - 8:00 PM)'],
+    min_order_amount: 0,
+    delivery_charge: 0,
+    allow_same_day_orders: false
+  });
   const [cart, setCart] = useState([]);
 
   // Modals state
@@ -45,12 +59,26 @@ export default function App() {
     }, 3500);
   };
 
-  // Fetch products on load
+  // Fetch products, services, settings on load
   useEffect(() => {
     getProducts()
       .then(setProducts)
       .catch(err => console.log('Products fetch notice:', err.message));
+
+    getServices()
+      .then(srvs => {
+        if (Array.isArray(srvs) && srvs.length > 0) setServices(srvs);
+      })
+      .catch(err => console.log('Services fetch notice:', err.message));
+
+    getSettings()
+      .then(stt => {
+        if (stt) setSettings(stt);
+      })
+      .catch(err => console.log('Settings fetch notice:', err.message));
   }, []);
+
+  const isMilkEnabled = services.some(s => s.category === 'milk' && (s.enabled === 1 || s.enabled === true));
 
   const handleUpdateApartment = (newApt) => {
     setApartmentState(newApt);
@@ -139,12 +167,21 @@ export default function App() {
             products={products}
             cart={cart}
             onAddToCart={handleAddToCart}
-            onOpenMilkSub={() => setActiveTab('milk')}
+            onOpenMilkSub={() => {
+              if (isMilkEnabled) {
+                setActiveTab('milk');
+              } else {
+                showToast('Morning Health Milk is launching soon! Enter your phone below to be notified.', 'success');
+              }
+            }}
             lang={lang}
+            customer={customer}
+            settings={settings}
+            showToast={showToast}
           />
         )}
 
-        {activeTab === 'milk' && (
+        {activeTab === 'milk' && isMilkEnabled && (
           <MilkSubTab
             customer={customer}
             onOpenDeliveryDetails={() => setIsDeliveryDetailsOpen(true)}
@@ -181,15 +218,17 @@ export default function App() {
           <span className="text-[10px] mt-0.5">{t.nav.store}</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('milk')}
-          className={`flex flex-col items-center py-1 px-3 rounded-xl transition ${
-            activeTab === 'milk' ? 'text-[#1b4332] font-black' : 'text-gray-400 hover:text-gray-700'
-          }`}
-        >
-          <Milk className={`w-5 h-5 ${activeTab === 'milk' ? 'text-[#2d6a4f]' : ''}`} />
-          <span className="text-[10px] mt-0.5">{t.nav.milk}</span>
-        </button>
+        {isMilkEnabled && (
+          <button
+            onClick={() => setActiveTab('milk')}
+            className={`flex flex-col items-center py-1 px-3 rounded-xl transition ${
+              activeTab === 'milk' ? 'text-[#1b4332] font-black' : 'text-gray-400 hover:text-gray-700'
+            }`}
+          >
+            <Milk className={`w-5 h-5 ${activeTab === 'milk' ? 'text-[#2d6a4f]' : ''}`} />
+            <span className="text-[10px] mt-0.5">{t.nav.milk}</span>
+          </button>
+        )}
 
         {/* Cart Button with Float Badge */}
         <button
@@ -244,6 +283,7 @@ export default function App() {
         onClearCart={() => setCart([])}
         apartment={apartment}
         customer={customer}
+        settings={settings}
         onOpenDeliveryDetails={() => setIsDeliveryDetailsOpen(true)}
         onOrderPlacedSuccess={() => setActiveTab('orders')}
         showToast={showToast}

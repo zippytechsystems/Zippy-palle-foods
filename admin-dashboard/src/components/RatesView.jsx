@@ -1,15 +1,33 @@
 import React, { useState } from 'react';
-import { Edit2, History, Check, X, ShieldAlert, TrendingUp } from 'lucide-react';
-import { updateRate, getRateHistory } from '../api';
+import { Edit2, History, Check, X, ShieldAlert, TrendingUp, Layers, CheckCircle2, Power, Clock, Loader2 } from 'lucide-react';
+import { updateRate, getRateHistory, updateAdminService } from '../api';
 import { translations } from '../translations';
 
-export default function RatesView({ rates, onRateUpdated, showToast, lang }) {
+export default function RatesView({ rates, onRateUpdated, showToast, lang, services = [], onServicesUpdated }) {
   const t = translations[lang];
   const [editingItem, setEditingItem] = useState(null);
   const [historyItem, setHistoryItem] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [updatingService, setUpdatingService] = useState(null);
+
+  const handleToggleService = async (category, currentlyEnabled) => {
+    try {
+      setUpdatingService(category);
+      await updateAdminService(category, !currentlyEnabled);
+      showToast(
+        `Service "${category.toUpperCase()}" is now ${!currentlyEnabled ? 'LIVE & AVAILABLE' : 'DISABLED / COMING SOON'}`, 
+        'success'
+      );
+      if (onServicesUpdated) onServicesUpdated();
+      if (onRateUpdated) onRateUpdated();
+    } catch (err) {
+      showToast(err.message || 'Failed to update service status', 'error');
+    } finally {
+      setUpdatingService(null);
+    }
+  };
 
   // Edit form state
   const [editPrice, setEditPrice] = useState('');
@@ -82,6 +100,107 @@ export default function RatesView({ rates, onRateUpdated, showToast, lang }) {
           <p className="text-xs md:text-sm text-[#5f665e] mt-0.5">
             {t.rates.subtitle}
           </p>
+        </div>
+      </div>
+
+      {/* Services & Feature Flags Control Card */}
+      <div className="bg-white rounded-3xl p-5 md:p-6 border border-[#e2dfd4] shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <div className="flex items-center space-x-2">
+              <Layers className="w-5 h-5 text-[#2d6a4f]" />
+              <h3 className="font-extrabold text-base md:text-lg text-[#1b4332]">
+                Services & Launch Flags (Phase 1)
+              </h3>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Control which categories are live in the customer app. Morning Health Milk is postponed for Phase 1. One-click toggle enables milk instantly without code updates.
+            </p>
+          </div>
+          <div className="flex items-center space-x-1.5 bg-[#f5f3ef] px-3 py-1.5 rounded-xl border border-[#e0ddd2] text-[11px] text-gray-600 font-bold self-start sm:self-auto">
+            <Clock className="w-3.5 h-3.5 text-[#2d6a4f]" />
+            <span>Next-day order cut-off: 9:00 PM IST</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          {[
+            {
+              category: 'fish',
+              title: 'Fresh Village Fish',
+              desc: 'Rohu & Katla pond fish • Cleaned / Whole / Curry cut',
+              icon: '🐟'
+            },
+            {
+              category: 'mutton',
+              title: 'Fresh Village Mutton',
+              desc: 'Grass-fed village sheep • Curry, Boneless, Keema, Liver, Paya',
+              icon: '🥩'
+            },
+            {
+              category: 'milk',
+              title: 'Morning Health Milk',
+              desc: 'Raw Desi Cow & Buffalo A2 milk • Postponed (Waitlist Active)',
+              icon: '🥛'
+            }
+          ].map((srv) => {
+            const srvData = services.find(s => s.category === srv.category);
+            const isEnabled = srvData ? (srvData.enabled === 1 || srvData.enabled === true) : (srv.category !== 'milk');
+            const isUpdating = updatingService === srv.category;
+
+            return (
+              <div
+                key={srv.category}
+                className={`p-4 rounded-2xl border transition flex flex-col justify-between ${
+                  isEnabled 
+                    ? 'bg-[#f4f9f4] border-[#a7f3d0] shadow-xs' 
+                    : 'bg-[#faf9f6] border-[#e2dfd4] opacity-90'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xl">{srv.icon}</span>
+                    <span
+                      className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                        isEnabled 
+                          ? 'bg-[#1b4332] text-[#a7f3d0]' 
+                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      }`}
+                    >
+                      {isEnabled ? 'Live / Active' : 'Postponed'}
+                    </span>
+                  </div>
+                  <h4 className="font-extrabold text-sm text-[#1b4332]">{srv.title}</h4>
+                  <p className="text-[11px] text-gray-500 mt-1 line-clamp-2 leading-relaxed">
+                    {srv.desc}
+                  </p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-gray-600">
+                    {isEnabled ? 'Customer ordering open' : 'Coming soon waitlist'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() => handleToggleService(srv.category, isEnabled)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs ${
+                      isEnabled
+                        ? 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
+                        : 'bg-[#2d6a4f] hover:bg-[#1b4332] text-white'
+                    }`}
+                  >
+                    {isUpdating ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Power className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isEnabled ? 'Turn Off' : 'Enable Service'}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

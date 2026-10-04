@@ -10,10 +10,12 @@ import {
 } from 'lucide-react';
 import { translations } from '../translations';
 
-export default function Sidebar({ activeSection, setActiveSection, lang, ordersCount, subsCount, onLogout }) {
+export default function Sidebar({ activeSection, setActiveSection, lang, ordersCount, subsCount, onLogout, services = [] }) {
   const t = translations[lang];
 
-  const menuItems = [
+  const isMilkEnabled = services.length === 0 || services.some(s => s.category === 'milk' && (s.enabled === 1 || s.enabled === true));
+
+  const allMenuItems = [
     {
       id: 'rates',
       label: t.sections.rates,
@@ -57,6 +59,11 @@ export default function Sidebar({ activeSection, setActiveSection, lang, ordersC
       badge: null
     }
   ];
+
+  const menuItems = allMenuItems.filter(item => {
+    if (item.id === 'subscriptions' && !isMilkEnabled) return false;
+    return true;
+  });
 
   return (
     <aside className="w-full md:w-64 bg-[#234e3b] text-white flex-shrink-0 flex md:flex-col justify-between border-r border-[#2d6a4f]/60 overflow-x-auto md:overflow-y-auto no-print">

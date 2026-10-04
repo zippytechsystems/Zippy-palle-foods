@@ -218,3 +218,35 @@ export function deleteApartment(id) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// 8. SERVICES (FEATURE FLAGS) & OPERATIONAL SETTINGS
+// ---------------------------------------------------------------------------
+export function getAdminServices() {
+  return apiRequest('/api/admin/services');
+}
+
+export function updateAdminService(category, enabled) {
+  return apiRequest(`/api/admin/services/${encodeURIComponent(category)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled })
+  });
+}
+
+export function updateAdminServices(services) {
+  return apiRequest('/api/admin/services', {
+    method: 'PUT',
+    body: JSON.stringify({ services })
+  });
+}
+
+export function getAdminSettings() {
+  return apiRequest('/api/admin/settings');
+}
+
+export function updateAdminSettings(settings) {
+  return apiRequest('/api/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings)
+  });
+}
+

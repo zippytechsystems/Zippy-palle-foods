@@ -14,6 +14,11 @@ export default function AlertsView({ lang, showToast, apartments = [] }) {
 
   const templates = [
     {
+      title: "Today's Fresh Rates Update",
+      audience: 'all',
+      message: "Palle Natural Foods: Today's fresh fish and mutton rates are updated. Order now in the app for doorstep delivery in HMT Nagar."
+    },
+    {
       title: 'Tender Village Mutton Cut Ready',
       audience: 'all',
       message: 'Fresh village sheep from Alair shepherds arrived at our HMT Nagar hub! Washed in turmeric water, bone-in curry cuts & boneless ready. Deliveries start 7:00 AM.'
@@ -26,7 +31,7 @@ export default function AlertsView({ lang, showToast, apartments = [] }) {
     {
       title: 'Morning A2 Milk Delivery Schedule',
       audience: 'milk_subscribers',
-      message: 'Raw dawn-milked Desi A2 milk will arrive between 6:30 - 7:30 AM tomorrow. Please keep your clean milk container outside the flat door. Thank you!'
+      message: 'Raw dawn-milked Desi A2 milk will arrive between 7:00 - 10:00 AM tomorrow. Please keep your clean milk container outside the flat door. Thank you!'
     }
   ];
 

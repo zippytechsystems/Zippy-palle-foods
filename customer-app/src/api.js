@@ -223,3 +223,19 @@ export function verifyOtp(phone, otp) {
     body: JSON.stringify({ phone, otp })
   });
 }
+
+// 6. SERVICES & OPERATIONAL SETTINGS
+export function getServices() {
+  return request('/api/services');
+}
+
+export function getSettings() {
+  return request('/api/settings');
+}
+
+export function notifyServiceWaitlist(service_category, phone) {
+  return request('/api/services/notify', {
+    method: 'POST',
+    body: JSON.stringify({ service_category, phone })
+  });
+}

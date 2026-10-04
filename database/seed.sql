@@ -11,7 +11,9 @@ INSERT INTO `products` (`id`, `name`, `category`, `unit`, `price`, `buy_price`, 
 ('prod-fish-katla', 'Katla Fish', 'fish', 'kg', 260.00, 195.00, 1, 'assets/fish.jpg', 'Freshwater pond Katla / Bocha fish. Sweet tender flesh, perfect for traditional tamarind fish pulusu.'),
 ('prod-mut-curry', 'Mutton Curry Cut', 'mutton', 'kg', 850.00, 680.00, 1, 'assets/mutton.jpg', 'Grass-fed village sheep from Alair pastoralists. Washed with natural turmeric water, medium bone-in pieces.'),
 ('prod-mut-boneless', 'Mutton Boneless', 'mutton', 'kg', 980.00, 780.00, 1, 'assets/mutton.jpg', '100% tender boneless cuts from fresh village sheep hind leg, cleaned with turmeric water.'),
-('prod-mut-keema', 'Mutton Keema', 'mutton', 'kg', 920.00, 730.00, 1, 'assets/mutton.jpg', 'Hand-minced fresh village mutton keema, zero frozen meat, zero preservatives.')
+('prod-mut-keema', 'Mutton Keema', 'mutton', 'kg', 920.00, 730.00, 1, 'assets/mutton.jpg', 'Hand-minced fresh village mutton keema, zero frozen meat, zero preservatives.'),
+('prod-mut-liver', 'Mutton Liver', 'mutton', 'kg', 900.00, 720.00, 1, 'assets/mutton.jpg', 'Fresh pasture-fed village sheep liver, nutrient-dense and tender.'),
+('prod-mut-paya', 'Mutton Paya (Soup Cuts)', 'mutton', 'kg', 450.00, 320.00, 1, 'assets/mutton.jpg', 'Traditional village cleaned sheep trotters / legs, ideal for immunity soup.')
 ON DUPLICATE KEY UPDATE 
     `price` = VALUES(`price`),
     `buy_price` = VALUES(`buy_price`),
@@ -76,3 +78,20 @@ ON DUPLICATE KEY UPDATE `litres` = VALUES(`litres`);
 INSERT INTO `alerts` (`title`, `message`, `audience`, `recipients_count`, `created_at`) VALUES
 ('Tender Village Mutton Harvested', 'Direct from Alair shepherds. Morning fresh cut delivered before 8:00 AM.', 'all', 48, NOW() - INTERVAL 1 DAY),
 ('Fresh Pond Katla Fish Arrived', 'Sweet freshwater Katla harvested this morning. Cleaned steaks available.', 'Raghavendra Nilayam', 18, NOW() - INTERVAL 2 DAY);
+
+-- 8. SEED SERVICES (Phase 1: Fish & Mutton enabled, Milk postponed)
+INSERT INTO `services` (`id`, `category`, `name`, `description`, `enabled`, `sort_order`) VALUES
+('srv-fish', 'fish', 'Fresh Village Fish', 'Freshwater pond fish from Telangana irrigation tanks. Cleaned, cut to order.', 1, 1),
+('srv-mutton', 'mutton', 'Fresh Village Mutton', 'Grass-fed village sheep from Alair pastoralists. Washed with natural turmeric.', 1, 2),
+('srv-milk', 'milk', 'Morning Health Milk', 'Pure raw A2 Desi cow & buffalo milk from Siddipet & Gajwel farmers. Postponed in Phase 1.', 0, 3)
+ON DUPLICATE KEY UPDATE `enabled` = VALUES(`enabled`), `name` = VALUES(`name`);
+
+-- 9. SEED OPERATIONAL SETTINGS
+INSERT INTO `settings` (`key`, `value`) VALUES
+('order_cutoff_time', '21:00'),
+('allow_sameday_orders', 'false'),
+('delivery_slots', '["Morning (7:00 AM - 10:00 AM)", "Evening (5:00 PM - 8:00 PM)"]'),
+('min_order_amount', '0'),
+('delivery_charge', '0')
+ON DUPLICATE KEY UPDATE `value` = VALUES(`value`);
+
