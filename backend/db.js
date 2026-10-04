@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const crypto = require('crypto');
 
 // Configuration from environment variables ONLY
 const DB_HOST = process.env.DB_HOST || 'localhost';
@@ -120,12 +121,12 @@ const memoryStore = {
     { id: 1, apartment_id: 4, phone: '98490 99887', created_at: new Date().toISOString() }
   ],
   customers: [
-    { id: 'c0000001-0000-0000-0000-000000000001', name: 'Srinivas Rao', phone: '98490 12345', apartment_id: 1, apartment_name: 'Shneha Apartment', block_wing: 'Block A', flat_number: '204', referral_code: 'PALLE-SRI01', created_at: new Date().toISOString() },
-    { id: 'c0000002-0000-0000-0000-000000000002', name: 'Vani Sharma', phone: '98490 23456', apartment_id: 1, apartment_name: 'Shneha Apartment', block_wing: 'Block B', flat_number: '302', referral_code: 'PALLE-VAN02', created_at: new Date().toISOString() },
-    { id: 'c0000003-0000-0000-0000-000000000003', name: 'Rajesh Kumar', phone: '98490 34567', apartment_id: 2, apartment_name: 'Amdur Castle Apartment', block_wing: 'Wing 1', flat_number: '402', referral_code: 'PALLE-RAJ03', created_at: new Date().toISOString() },
-    { id: 'c0000004-0000-0000-0000-000000000004', name: 'Kavitha Reddy', phone: '98490 45678', apartment_id: 3, apartment_name: 'Pally Residency', block_wing: 'Block B', flat_number: '105', referral_code: 'PALLE-KAV04', created_at: new Date().toISOString() },
-    { id: 'c0000005-0000-0000-0000-000000000005', name: 'Venkat Ramana', phone: '98490 56789', apartment_id: 2, apartment_name: 'Amdur Castle Apartment', block_wing: 'Tower 1', flat_number: '501', referral_code: 'PALLE-VEN05', created_at: new Date().toISOString() },
-    { id: 'c0000006-0000-0000-0000-000000000006', name: 'Lakshmi Prasanna', phone: '98490 67890', apartment_id: 3, apartment_name: 'Pally Residency', block_wing: 'North Wing', flat_number: '203', referral_code: 'PALLE-LAK06', created_at: new Date().toISOString() }
+    { id: 'c0000001-0000-0000-0000-000000000001', customer_key: 'key-cust-0001-srinivas-9849012345', name: 'Srinivas Rao', phone: '98490 12345', apartment_id: 1, apartment_name: 'Shneha Apartment', block_wing: 'Block A', flat_number: '204', referral_code: 'PALLE-SRI01', blocked: false, created_at: new Date().toISOString() },
+    { id: 'c0000002-0000-0000-0000-000000000002', customer_key: 'key-cust-0002-vani-9849023456', name: 'Vani Sharma', phone: '98490 23456', apartment_id: 1, apartment_name: 'Shneha Apartment', block_wing: 'Block B', flat_number: '302', referral_code: 'PALLE-VAN02', blocked: false, created_at: new Date().toISOString() },
+    { id: 'c0000003-0000-0000-0000-000000000003', customer_key: 'key-cust-0003-rajesh-9849034567', name: 'Rajesh Kumar', phone: '98490 34567', apartment_id: 2, apartment_name: 'Amdur Castle Apartment', block_wing: 'Wing 1', flat_number: '402', referral_code: 'PALLE-RAJ03', blocked: false, created_at: new Date().toISOString() },
+    { id: 'c0000004-0000-0000-0000-000000000004', customer_key: 'key-cust-0004-kavitha-9849045678', name: 'Kavitha Reddy', phone: '98490 45678', apartment_id: 3, apartment_name: 'Pally Residency', block_wing: 'Block B', flat_number: '105', referral_code: 'PALLE-KAV04', blocked: false, created_at: new Date().toISOString() },
+    { id: 'c0000005-0000-0000-0000-000000000005', customer_key: 'key-cust-0005-venkat-9849056789', name: 'Venkat Ramana', phone: '98490 56789', apartment_id: 2, apartment_name: 'Amdur Castle Apartment', block_wing: 'Tower 1', flat_number: '501', referral_code: 'PALLE-VEN05', blocked: false, created_at: new Date().toISOString() },
+    { id: 'c0000006-0000-0000-0000-000000000006', customer_key: 'key-cust-0006-lakshmi-9849067890', name: 'Lakshmi Prasanna', phone: '98490 67890', apartment_id: 3, apartment_name: 'Pally Residency', block_wing: 'North Wing', flat_number: '203', referral_code: 'PALLE-LAK06', blocked: false, created_at: new Date().toISOString() }
   ],
   orders: [
     {
@@ -977,12 +978,14 @@ async function getCustomers(queryStr = '') {
     const [rows] = await pool.query(sql, params);
     return rows.map(c => ({
       id: c.id,
+      customer_key: c.customer_key,
       name: c.name,
       phone: c.phone,
       apartment_name: c.apartment_name,
       block_wing: c.block_wing,
       flat_number: c.flat_number,
       referral_code: c.referral_code,
+      blocked: Boolean(c.blocked),
       orders_count: Number(c.orders_count),
       total_spent: Number(Number(c.total_spent).toFixed(2)),
       has_active_milk: Boolean(c.has_active_milk),
@@ -1005,6 +1008,7 @@ async function getCustomers(queryStr = '') {
       const subs = memoryStore.subscriptions.filter(s => s.customer_id === c.id);
       return {
         ...c,
+        blocked: Boolean(c.blocked),
         orders_count: orders.length,
         total_spent: Number(total_spent.toFixed(2)),
         has_active_milk: subs.some(s => s.status === 'active')
@@ -1030,6 +1034,8 @@ async function getCustomerById(id) {
 
     return {
       ...customer,
+      apartment: customer.apartment_name,
+      blocked: Boolean(customer.blocked),
       orders: orders.map(o => ({
         ...o,
         total_amount: Number(o.total_amount),
@@ -1050,6 +1056,70 @@ async function getCustomerById(id) {
 
   return {
     ...customer,
+    apartment: customer.apartment_name,
+    blocked: Boolean(customer.blocked),
+    orders,
+    subscriptions: subs
+  };
+}
+
+async function getCustomerByKey(customerKey) {
+  if (!customerKey) return null;
+  if (await testMySQL()) {
+    const [custs] = await pool.query('SELECT * FROM customers WHERE customer_key = ?', [customerKey]);
+    if (!custs.length) return null;
+    const customer = custs[0];
+
+    const [orders] = await pool.query(
+      'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
+      [customer.id]
+    );
+
+    const orderIds = orders.map(o => o.id);
+    let itemsMap = {};
+    if (orderIds.length > 0) {
+      const [items] = await pool.query('SELECT * FROM order_items WHERE order_id IN (?)', [orderIds]);
+      items.forEach(it => {
+        if (!itemsMap[it.order_id]) itemsMap[it.order_id] = [];
+        itemsMap[it.order_id].push(it);
+      });
+    }
+
+    const [subs] = await pool.query(
+      `SELECT s.*, p.name AS product_name 
+       FROM subscriptions s JOIN products p ON s.product_id = p.id 
+       WHERE s.customer_id = ? ORDER BY s.created_at DESC`,
+      [customer.id]
+    );
+
+    return {
+      ...customer,
+      apartment: customer.apartment_name,
+      blocked: Boolean(customer.blocked),
+      orders: orders.map(o => ({
+        ...o,
+        total_amount: Number(o.total_amount),
+        paid: Boolean(o.paid),
+        delivery_date: o.delivery_date.toISOString ? o.delivery_date.toISOString().split('T')[0] : o.delivery_date,
+        items: itemsMap[o.id] || []
+      })),
+      subscriptions: subs.map(s => ({
+        ...s,
+        litres: Number(s.litres)
+      }))
+    };
+  }
+
+  const customer = memoryStore.customers.find(c => c.customer_key === customerKey);
+  if (!customer) return null;
+
+  const orders = memoryStore.orders.filter(o => o.customer_id === customer.id);
+  const subs = memoryStore.subscriptions.filter(s => s.customer_id === customer.id);
+
+  return {
+    ...customer,
+    apartment: customer.apartment_name,
+    blocked: Boolean(customer.blocked),
     orders,
     subscriptions: subs
   };
@@ -1064,9 +1134,46 @@ async function getCustomerByPhone(phone) {
   return memoryStore.customers.find(c => c.phone.replace(/[^0-9]/g, '').endsWith(clean.slice(-10))) || null;
 }
 
+async function updateCustomer(id, { name, apartment_id, apartment_name, block_wing, flat_number, blocked }) {
+  if (await testMySQL()) {
+    const fields = [];
+    const params = [];
+    if (name !== undefined) { fields.push('name = ?'); params.push(name); }
+    if (apartment_id !== undefined) { fields.push('apartment_id = ?'); params.push(apartment_id ? Number(apartment_id) : null); }
+    if (apartment_name !== undefined) { fields.push('apartment_name = ?'); params.push(apartment_name); }
+    if (block_wing !== undefined) { fields.push('block_wing = ?'); params.push(block_wing); }
+    if (flat_number !== undefined) { fields.push('flat_number = ?'); params.push(flat_number); }
+    if (blocked !== undefined) { fields.push('blocked = ?'); params.push(blocked ? 1 : 0); }
+
+    if (fields.length > 0) {
+      params.push(id);
+      await pool.query(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`, params);
+    }
+    const [rows] = await pool.query('SELECT * FROM customers WHERE id = ?', [id]);
+    if (!rows.length) throw new Error('Customer not found');
+    const c = rows[0];
+    return {
+      ...c,
+      apartment: c.apartment_name,
+      blocked: Boolean(c.blocked)
+    };
+  }
+
+  const cust = memoryStore.customers.find(c => c.id === id);
+  if (!cust) throw new Error('Customer not found');
+  if (name !== undefined) cust.name = name;
+  if (apartment_id !== undefined) cust.apartment_id = apartment_id ? Number(apartment_id) : null;
+  if (apartment_name !== undefined) { cust.apartment_name = apartment_name; cust.apartment = apartment_name; }
+  if (block_wing !== undefined) cust.block_wing = block_wing;
+  if (flat_number !== undefined) cust.flat_number = flat_number;
+  if (blocked !== undefined) cust.blocked = Boolean(blocked);
+  return cust;
+}
+
 async function createCustomer({ name, phone, apartment_id = null, apartment_name = null, block_wing = 'A', flat_number, referred_by = null }) {
   const customerId = `c-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
   const referral_code = `PALLE-${name.substring(0, 3).toUpperCase()}${Math.floor(10 + Math.random() * 90)}`;
+  const cleanPhone = (phone || '').replace(/[^0-9]/g, '').slice(-10);
 
   if (await testMySQL()) {
     let resolvedAptId = apartment_id ? Number(apartment_id) : null;
@@ -1080,26 +1187,48 @@ async function createCustomer({ name, phone, apartment_id = null, apartment_name
       if (aptRows.length) resolvedAptId = aptRows[0].id;
     }
 
-    await pool.query(
-      `INSERT INTO customers (id, name, phone, apartment_id, apartment_name, block_wing, flat_number, referral_code, referred_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE 
-         name = VALUES(name),
-         apartment_id = VALUES(apartment_id),
-         apartment_name = VALUES(apartment_name),
-         block_wing = VALUES(block_wing),
-         flat_number = VALUES(flat_number)`,
-      [customerId, name, phone, resolvedAptId, resolvedAptName || 'Other', block_wing, flat_number, referral_code, referred_by]
-    );
+    const [existingRows] = await pool.query('SELECT * FROM customers WHERE phone LIKE ?', [`%${cleanPhone}`]);
+    let customerKey;
 
-    const [rows] = await pool.query('SELECT * FROM customers WHERE phone = ?', [phone]);
-    const resCust = rows[0] || {};
-    return {
-      ...resCust,
-      apartment: resCust.apartment_name
-    };
+    if (existingRows.length > 0) {
+      const existing = existingRows[0];
+      customerKey = existing.customer_key || crypto.randomUUID();
+      await pool.query(
+        `UPDATE customers SET 
+           name = ?, 
+           apartment_id = ?, 
+           apartment_name = ?, 
+           block_wing = ?, 
+           flat_number = ?,
+           customer_key = ?
+         WHERE id = ?`,
+        [name, resolvedAptId, resolvedAptName || existing.apartment_name || 'Shneha Apartment', block_wing, flat_number, customerKey, existing.id]
+      );
+      const [updatedRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [existing.id]);
+      const resCust = updatedRows[0] || {};
+      return {
+        ...resCust,
+        apartment: resCust.apartment_name,
+        blocked: Boolean(resCust.blocked)
+      };
+    } else {
+      customerKey = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO customers (id, customer_key, name, phone, apartment_id, apartment_name, block_wing, flat_number, referral_code, referred_by, blocked)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        [customerId, customerKey, name, cleanPhone, resolvedAptId, resolvedAptName || 'Shneha Apartment', block_wing, flat_number, referral_code, referred_by]
+      );
+      const [newRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [customerId]);
+      const resCust = newRows[0] || {};
+      return {
+        ...resCust,
+        apartment: resCust.apartment_name,
+        blocked: Boolean(resCust.blocked)
+      };
+    }
   }
 
+  // MemoryStore
   let resolvedAptId = apartment_id ? Number(apartment_id) : null;
   let resolvedAptName = apartment_name;
   if (resolvedAptId && !resolvedAptName) {
@@ -1110,7 +1239,7 @@ async function createCustomer({ name, phone, apartment_id = null, apartment_name
     if (apt) resolvedAptId = apt.id;
   }
 
-  let cust = memoryStore.customers.find(c => c.phone === phone);
+  let cust = memoryStore.customers.find(c => (c.phone || '').replace(/[^0-9]/g, '').endsWith(cleanPhone));
   if (cust) {
     cust.name = name;
     cust.apartment_id = resolvedAptId;
@@ -1118,13 +1247,17 @@ async function createCustomer({ name, phone, apartment_id = null, apartment_name
     cust.apartment = cust.apartment_name;
     cust.block_wing = block_wing;
     cust.flat_number = flat_number;
+    if (!cust.customer_key) cust.customer_key = crypto.randomUUID();
+    cust.blocked = Boolean(cust.blocked);
     return cust;
   }
 
+  const customerKey = crypto.randomUUID();
   cust = {
     id: customerId,
+    customer_key: customerKey,
     name,
-    phone,
+    phone: cleanPhone,
     apartment_id: resolvedAptId,
     apartment_name: resolvedAptName || 'Shneha Apartment',
     apartment: resolvedAptName || 'Shneha Apartment',
@@ -1132,6 +1265,7 @@ async function createCustomer({ name, phone, apartment_id = null, apartment_name
     flat_number,
     referral_code,
     referred_by,
+    blocked: false,
     created_at: new Date().toISOString()
   };
   memoryStore.customers.push(cust);
@@ -1579,7 +1713,9 @@ module.exports = {
   getCustomers,
   getCustomerById,
   getCustomerByPhone,
+  getCustomerByKey,
   createCustomer,
+  updateCustomer,
   createOrder,
   createSubscription,
   createAlert,

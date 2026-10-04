@@ -74,6 +74,7 @@ CREATE TABLE `apartment_leads` (
 -- 5. CUSTOMERS TABLE (HMT Nagar apartment residents)
 CREATE TABLE `customers` (
     `id` VARCHAR(64) NOT NULL,
+    `customer_key` VARCHAR(64) NOT NULL,
     `name` VARCHAR(120) NOT NULL,
     `phone` VARCHAR(20) NOT NULL,
     `apartment_id` INT NULL,
@@ -82,9 +83,11 @@ CREATE TABLE `customers` (
     `flat_number` VARCHAR(30) NOT NULL,
     `referral_code` VARCHAR(30) DEFAULT NULL,
     `referred_by` VARCHAR(30) DEFAULT NULL,
+    `blocked` TINYINT(1) NOT NULL DEFAULT 0,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uniq_customers_phone` (`phone`),
+    UNIQUE KEY `uniq_customers_key` (`customer_key`),
     KEY `idx_customers_apartment` (`apartment_id`),
     CONSTRAINT `fk_customer_apartment` FOREIGN KEY (`apartment_id`) REFERENCES `apartments` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

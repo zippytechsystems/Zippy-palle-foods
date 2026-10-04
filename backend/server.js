@@ -60,10 +60,13 @@ const allowedOrigins = process.env.CORS_ORIGIN
 app.use(cors({
   origin: allowedOrigins === '*' ? true : allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Customer-Key']
 }));
 
 app.use(express.json());
+
+// Feature Flags
+const OTP_ENABLED = process.env.OTP_ENABLED === 'true'; // Disabled by default for frictionless order flow
 
 // Rate Limiters
 const loginLimiter = rateLimit({
@@ -92,6 +95,22 @@ const otpVerifyLimiter = rateLimit({
   }
 });
 
+// Max 5 orders per hour per customer_key and per IP
+const orderPlacementLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => {
+    const key = req.headers['x-customer-key'] || req.body?.customer_key || req.body?.customer_id || req.body?.customer_phone || '';
+    return `${req.ip}_${key}`;
+  },
+  message: {
+    error: 'Order limit reached (maximum 5 orders per hour allowed). Please contact Palle Natural Foods if you need urgent assistance.'
+  },
+  skipFailedRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Admin JWT Authentication Middleware
 function authenticateAdmin(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -113,6 +132,28 @@ function authenticateAdmin(req, res, next) {
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Access denied. Invalid or expired token.' });
+  }
+}
+
+// Customer Key Authentication Middleware (Protects customer endpoints without login)
+async function requireCustomerKey(req, res, next) {
+  const customerKey = req.headers['x-customer-key'] || req.query.customer_key || req.body?.customer_key;
+  if (!customerKey) {
+    return res.status(401).json({ error: 'Customer key required. Please provide your delivery details.' });
+  }
+
+  try {
+    const customer = await db.getCustomerByKey(customerKey);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found. Please provide your delivery details.' });
+    }
+    if (customer.blocked) {
+      return res.status(403).json({ error: 'Please contact Palle Natural Foods', blocked: true });
+    }
+    req.customer = customer;
+    next();
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 }
 
@@ -155,6 +196,9 @@ async function sendSmsOtp(phone, otp) {
 }
 
 app.post('/api/auth/send-otp', otpLimiter, async (req, res) => {
+  if (!OTP_ENABLED) {
+    return res.status(403).json({ error: 'OTP authentication is disabled. Delivery details are saved directly.' });
+  }
   try {
     const { phone } = req.body;
     if (!phone) {
@@ -189,6 +233,9 @@ app.post('/api/auth/send-otp', otpLimiter, async (req, res) => {
 });
 
 app.post('/api/auth/verify-otp', otpVerifyLimiter, async (req, res) => {
+  if (!OTP_ENABLED) {
+    return res.status(403).json({ error: 'OTP authentication is disabled. Delivery details are saved directly.' });
+  }
   try {
     const { phone, otp } = req.body;
     if (!phone || !otp) {
@@ -394,6 +441,15 @@ app.get('/api/admin/customers/:id', authenticateAdmin, async (req, res) => {
   }
 });
 
+app.patch('/api/admin/customers/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const updated = await db.updateCustomer(req.params.id, req.body);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 7. WhatsApp & Broadcast Alerts
 app.post('/api/admin/alerts', authenticateAdmin, async (req, res) => {
   try {
@@ -497,22 +553,100 @@ app.post('/api/customers', async (req, res) => {
     if (!name || !phone || (!apartment_id && !aptName) || !flat_number) {
       return res.status(400).json({ error: 'Name, phone, apartment, and flat number are required' });
     }
+
+    const cleanPhone = (phone || '').replace(/[^0-9]/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit mobile phone number' });
+    }
+
+    // Verify apartment is active
+    const apts = await db.getPublicApartments();
+    const apt = apts.find(a => 
+      (apartment_id && a.id === Number(apartment_id)) || 
+      (aptName && a.name.toLowerCase() === aptName.toLowerCase())
+    );
+
+    if (!apt || apt.status !== 'active') {
+      return res.status(400).json({ error: 'Delivery is currently only available for active apartments.' });
+    }
+
     const customer = await db.createCustomer({
-      name,
-      phone,
-      apartment_id,
-      apartment_name: aptName,
-      block_wing,
-      flat_number,
+      name: name.trim(),
+      phone: cleanPhone,
+      apartment_id: apt.id,
+      apartment_name: apt.name,
+      block_wing: (block_wing || 'A').trim(),
+      flat_number: flat_number.toString().trim(),
       referred_by
     });
+
     res.json(customer);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/orders', async (req, res) => {
+// Authenticated Customer Endpoints (Protected via X-Customer-Key header)
+app.get('/api/customer/me', requireCustomerKey, async (req, res) => {
+  res.json({
+    success: true,
+    customer: {
+      id: req.customer.id,
+      customer_key: req.customer.customer_key,
+      name: req.customer.name,
+      phone: req.customer.phone,
+      apartment_id: req.customer.apartment_id,
+      apartment_name: req.customer.apartment_name,
+      apartment: req.customer.apartment_name,
+      block_wing: req.customer.block_wing,
+      flat_number: req.customer.flat_number,
+      referral_code: req.customer.referral_code,
+      blocked: Boolean(req.customer.blocked),
+      orders: req.customer.orders || [],
+      subscriptions: req.customer.subscriptions || []
+    }
+  });
+});
+
+app.get('/api/customer/orders', requireCustomerKey, async (req, res) => {
+  res.json(req.customer.orders || []);
+});
+
+app.get('/api/customer/subscriptions', requireCustomerKey, async (req, res) => {
+  res.json(req.customer.subscriptions || []);
+});
+
+app.patch('/api/customer/subscriptions/:id/pause', requireCustomerKey, async (req, res) => {
+  try {
+    const sub = (req.customer.subscriptions || []).find(s => s.id === req.params.id);
+    if (!sub) {
+      return res.status(404).json({ error: 'Subscription not found for this account' });
+    }
+    const updated = await db.updateSubscription(req.params.id, { 
+      action: 'pause', 
+      until: req.body?.until || null 
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/customer/subscriptions/:id/resume', requireCustomerKey, async (req, res) => {
+  try {
+    const sub = (req.customer.subscriptions || []).find(s => s.id === req.params.id);
+    if (!sub) {
+      return res.status(404).json({ error: 'Subscription not found for this account' });
+    }
+    const updated = await db.updateSubscription(req.params.id, { action: 'resume' });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create Order (Rate limited to max 5 orders/hr per customer_key & IP)
+app.post('/api/orders', orderPlacementLimiter, async (req, res) => {
   try {
     const {
       customer_id,
@@ -528,36 +662,113 @@ app.post('/api/orders', async (req, res) => {
       notes
     } = req.body;
 
-    if (!customer_id || !items || !items.length) {
-      return res.status(400).json({ error: 'Customer ID and at least one item are required' });
+    const customerKey = req.headers['x-customer-key'] || req.body?.customer_key;
+    let customer = null;
+
+    if (customerKey) {
+      customer = await db.getCustomerByKey(customerKey);
+      if (!customer) {
+        return res.status(401).json({ error: 'Invalid customer key. Please confirm your delivery details.' });
+      }
+    } else if (customer_id) {
+      customer = await db.getCustomerById(customer_id);
     }
 
+    if (!customer) {
+      return res.status(401).json({ error: 'Customer verification required. Please enter your delivery details.' });
+    }
+
+    // Check if customer is blocked
+    if (customer.blocked) {
+      return res.status(403).json({ error: 'Please contact Palle Natural Foods', blocked: true });
+    }
+
+    // Verify apartment is active
+    const targetAptName = apartment_name || customer.apartment_name;
+    const apts = await db.getPublicApartments();
+    const apt = apts.find(a => a.name.toLowerCase() === (targetAptName || '').toLowerCase());
+    if (!apt || apt.status !== 'active') {
+      return res.status(400).json({ error: 'Delivery is currently only available for active apartments.' });
+    }
+
+    // Validate items array
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'At least one product item is required to place an order.' });
+    }
+
+    // Validate products exist in catalog
+    const validProds = await db.getProducts();
+    const validProdMap = {};
+    validProds.forEach(p => { validProdMap[p.id] = p; });
+
+    for (const it of items) {
+      if (!it.product_id || !validProdMap[it.product_id]) {
+        return res.status(400).json({ 
+          error: `Invalid product: ${it.name || it.product_id}. Only village fresh milk, fish, and mutton are available.` 
+        });
+      }
+      if (Number(it.quantity) <= 0) {
+        return res.status(400).json({ error: 'Product quantity must be greater than zero.' });
+      }
+    }
+
+    // Cash on Delivery only for now (OTP_ENABLED=false), keep a hook for UPI/Razorpay later
+    const selectedPaymentMethod = payment_method === 'upi' ? 'upi' : 'cod';
+
     const order = await db.createOrder({
-      customer_id,
-      customer_name,
-      customer_phone,
-      apartment_name,
-      block_wing,
-      flat_number,
-      delivery_date,
-      delivery_slot,
+      customer_id: customer.id,
+      customer_name: customer_name || customer.name,
+      customer_phone: customer_phone || customer.phone,
+      apartment_name: apt.name,
+      block_wing: block_wing || customer.block_wing || 'A',
+      flat_number: flat_number || customer.flat_number,
+      delivery_date: delivery_date || new Date().toISOString().split('T')[0],
+      delivery_slot: delivery_slot === 'evening' ? 'evening' : 'morning',
       items,
-      payment_method,
-      notes
+      payment_method: selectedPaymentMethod,
+      notes: notes || ''
     });
+
     res.json(order);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// Create Subscription (Milk)
 app.post('/api/subscriptions', async (req, res) => {
   try {
     const { customer_id, litres, frequency } = req.body;
-    if (!customer_id) {
-      return res.status(400).json({ error: 'Customer ID is required' });
+    const customerKey = req.headers['x-customer-key'] || req.body?.customer_key;
+    let customer = null;
+
+    if (customerKey) {
+      customer = await db.getCustomerByKey(customerKey);
+    } else if (customer_id) {
+      customer = await db.getCustomerById(customer_id);
     }
-    const sub = await db.createSubscription({ customer_id, litres, frequency });
+
+    if (!customer) {
+      return res.status(401).json({ error: 'Customer details required. Please enter your delivery details.' });
+    }
+
+    if (customer.blocked) {
+      return res.status(403).json({ error: 'Please contact Palle Natural Foods', blocked: true });
+    }
+
+    // Verify apartment is active
+    const apts = await db.getPublicApartments();
+    const apt = apts.find(a => a.name.toLowerCase() === (customer.apartment_name || '').toLowerCase());
+    if (!apt || apt.status !== 'active') {
+      return res.status(400).json({ error: 'Subscriptions are currently only available for active apartments.' });
+    }
+
+    const parsedLitres = Number(litres) || 1.0;
+    const sub = await db.createSubscription({ 
+      customer_id: customer.id, 
+      litres: parsedLitres, 
+      frequency: frequency === 'alternate' ? 'alternate' : 'daily' 
+    });
     res.json(sub);
   } catch (err) {
     res.status(500).json({ error: err.message });

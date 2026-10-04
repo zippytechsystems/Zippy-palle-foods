@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Globe, User, LogOut } from 'lucide-react';
+import { MapPin, Globe, User, Edit3 } from 'lucide-react';
 import { translations } from '../translations';
 
 export default function Header({ 
@@ -8,8 +8,7 @@ export default function Header({
   lang, 
   setLang, 
   customer, 
-  onOpenLogin,
-  onLogout 
+  onOpenEditProfile 
 }) {
   const t = translations[lang];
 
@@ -47,29 +46,20 @@ export default function Header({
             <span>{lang === 'en' ? 'తెలుగు' : 'English'}</span>
           </button>
 
-          {/* User Account / Login */}
-          {customer && customer.name ? (
-            <div className="flex items-center space-x-1.5">
-              <span className="text-xs font-bold text-[#a7f3d0] hidden sm:inline max-w-[80px] truncate">
-                {customer.name}
-              </span>
-              <button
-                onClick={onLogout}
-                className="p-1.5 bg-[#2d6a4f] hover:bg-red-900/60 rounded-lg text-gray-200 hover:text-red-200 transition"
-                title={t.common.logout}
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={onOpenLogin}
-              className="flex items-center space-x-1 bg-[#52b788] hover:bg-[#40916c] text-[#0f291e] font-bold px-2.5 py-1.5 rounded-lg text-xs transition shadow-xs"
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>{t.common.login}</span>
-            </button>
-          )}
+          {/* User Profile / Delivery Details */}
+          <button
+            onClick={onOpenEditProfile}
+            className="flex items-center space-x-1.5 bg-[#2d6a4f] hover:bg-[#3d8564] text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-[#52b788]/40 transition"
+            title={lang === 'te' ? 'డెలివరీ వివరాలు సవరించండి' : 'Edit delivery details'}
+          >
+            <User className="w-3.5 h-3.5 text-[#a7f3d0]" />
+            {customer && customer.name ? (
+              <span className="max-w-[80px] truncate font-bold">{customer.name.split(' ')[0]}</span>
+            ) : (
+              <span className="text-[11px]">{lang === 'te' ? 'వివరాలు' : 'Details'}</span>
+            )}
+            <Edit3 className="w-2.5 h-2.5 text-[#a7f3d0]/80" />
+          </button>
         </div>
       </div>
 
@@ -81,7 +71,7 @@ export default function Header({
         <div className="flex items-center space-x-1.5 overflow-hidden">
           <MapPin className="w-3.5 h-3.5 text-[#52b788] flex-shrink-0" />
           <span className="font-semibold text-gray-200 truncate">
-            {apartment.name}, Flat {apartment.flat} {apartment.block ? `(${apartment.block})` : ''} • HMT Nagar
+            {apartment?.name || 'Select Apartment'}, Flat {apartment?.flat || ''} {apartment?.block ? `(${apartment.block})` : ''} • HMT Nagar
           </span>
         </div>
         <span className="text-[11px] font-bold text-[#a7f3d0] bg-[#234e3b] px-2 py-0.5 rounded border border-[#40916c]/40 flex-shrink-0 ml-2">

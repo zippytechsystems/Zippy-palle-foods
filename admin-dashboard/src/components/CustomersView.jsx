@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Phone, Building2, Milk, ChevronRight, X, User } from 'lucide-react';
-import { getCustomers, getCustomerById } from '../api';
+import { Search, Phone, Building2, Milk, ChevronRight, X, User, Ban, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { getCustomers, getCustomerById, updateCustomer } from '../api';
 import { translations } from '../translations';
 
 export default function CustomersView({ lang, showToast }) {
@@ -11,6 +11,7 @@ export default function CustomersView({ lang, showToast }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerDetail, setCustomerDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
 
   const fetchCustomers = async (q = '') => {
     try {
@@ -41,6 +42,34 @@ export default function CustomersView({ lang, showToast }) {
       showToast('Could not load customer history', 'error');
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const handleToggleBlock = async (c) => {
+    const newBlockedState = !c.blocked;
+    const confirmMsg = newBlockedState
+      ? `Are you sure you want to block ${c.name}? They will not be able to place any orders or subscriptions.`
+      : `Unblock ${c.name}?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setTogglingId(c.id);
+      const updated = await updateCustomer(c.id, { blocked: newBlockedState });
+      showToast(`${c.name} is now ${newBlockedState ? 'Blocked' : 'Active'}`, newBlockedState ? 'info' : 'success');
+      
+      // Update local states
+      setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, blocked: newBlockedState } : item));
+      if (selectedCustomer && selectedCustomer.id === c.id) {
+        setSelectedCustomer(prev => ({ ...prev, blocked: newBlockedState }));
+      }
+      if (customerDetail && customerDetail.id === c.id) {
+        setCustomerDetail(prev => ({ ...prev, blocked: newBlockedState }));
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to update customer status', 'error');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -87,16 +116,22 @@ export default function CustomersView({ lang, showToast }) {
                   <th className="py-3 px-4">Resident Name</th>
                   <th className="py-3 px-4">Contact Phone</th>
                   <th className="py-3 px-4">Apartment & Flat</th>
+                  <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-center">Orders</th>
                   <th className="py-3 px-4 text-center">Milk Sub</th>
                   <th className="py-3 px-4 text-right">Total Spent</th>
-                  <th className="py-3 px-4 text-right">Action</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#eeebe2] text-sm">
                 {customers.map((c) => (
                   <tr key={c.id} className="hover:bg-[#faf9f6] transition">
-                    <td className="py-3.5 px-4 font-bold text-gray-900">{c.name}</td>
+                    <td className="py-3.5 px-4 font-bold text-gray-900">
+                      <div>{c.name}</div>
+                      {c.referral_code && (
+                        <div className="text-[10px] text-gray-400 font-mono">{c.referral_code}</div>
+                      )}
+                    </td>
                     <td className="py-3.5 px-4">
                       <a
                         href={`tel:${c.phone}`}
@@ -111,6 +146,19 @@ export default function CustomersView({ lang, showToast }) {
                       <div className="text-xs text-gray-500">
                         {c.block_wing ? `${c.block_wing} - ` : ''}Flat {c.flat_number}
                       </div>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      {c.blocked ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-100 text-red-800 border border-red-300">
+                          <Ban className="w-2.5 h-2.5" />
+                          <span>Blocked</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          <CheckCircle2 className="w-2.5 h-2.5" />
+                          <span>Active</span>
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-center font-bold text-gray-700">
                       {c.orders_count}
@@ -128,7 +176,22 @@ export default function CustomersView({ lang, showToast }) {
                     <td className="py-3.5 px-4 text-right font-extrabold text-[#1b4332]">
                       ₹{c.total_spent}
                     </td>
-                    <td className="py-3.5 px-4 text-right">
+                    <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                      {/* Block / Unblock Button */}
+                      <button
+                        onClick={() => handleToggleBlock(c)}
+                        disabled={togglingId === c.id}
+                        className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition ${
+                          c.blocked
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-red-50 hover:bg-red-100 text-red-800 border-red-300'
+                        }`}
+                        title={c.blocked ? 'Unblock customer' : 'Block customer'}
+                      >
+                        {c.blocked ? 'Unblock' : 'Block'}
+                      </button>
+
+                      {/* View History Button */}
                       <button
                         onClick={() => viewCustomerDetail(c)}
                         className="inline-flex items-center space-x-1 text-xs font-bold text-[#2d6a4f] hover:text-[#1b4332] bg-[#e8f5e9] hover:bg-[#d8f3dc] px-2.5 py-1 rounded-lg transition"
@@ -151,11 +214,22 @@ export default function CustomersView({ lang, showToast }) {
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-[#e5e2d9] max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between border-b pb-3 mb-4">
               <div>
-                <h3 className="font-extrabold text-lg text-[#1b4332]">
-                  {selectedCustomer.name}
-                </h3>
-                <p className="text-xs text-gray-500">
-                  {selectedCustomer.apartment_name} • {selectedCustomer.block_wing} Flat {selectedCustomer.flat_number}
+                <div className="flex items-center space-x-2">
+                  <h3 className="font-extrabold text-lg text-[#1b4332]">
+                    {selectedCustomer.name}
+                  </h3>
+                  {selectedCustomer.blocked ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-300 uppercase">
+                      Blocked
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {selectedCustomer.apartment_name} • {selectedCustomer.block_wing} Flat {selectedCustomer.flat_number} • {selectedCustomer.phone}
                 </p>
               </div>
               <button
@@ -169,11 +243,34 @@ export default function CustomersView({ lang, showToast }) {
               </button>
             </div>
 
-            <div className="overflow-y-auto space-y-4 pr-1">
+            <div className="overflow-y-auto space-y-4 pr-1 flex-1">
               {loadingDetail ? (
                 <div className="py-12 text-center text-sm text-gray-500">{t.common.loading}</div>
               ) : customerDetail ? (
                 <>
+                  {/* Status Toggle Box */}
+                  <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-bold text-gray-800">Account Ordering Status:</span>
+                      <p className="text-[11px] text-gray-500">
+                        {customerDetail.blocked 
+                          ? 'Customer is BLOCKED. Cannot place orders or start subscriptions.' 
+                          : 'Customer is ACTIVE and can place orders.'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleToggleBlock(customerDetail)}
+                      disabled={togglingId === customerDetail.id}
+                      className={`px-3 py-1.5 rounded-xl font-bold border transition ${
+                        customerDetail.blocked
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-red-600 text-white hover:bg-red-700'
+                      }`}
+                    >
+                      {customerDetail.blocked ? 'Unblock Account' : 'Block Account'}
+                    </button>
+                  </div>
+
                   {/* Active Milk Subscriptions */}
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">

@@ -4,8 +4,7 @@ import {
   getSelectedApartment, 
   setSelectedApartment, 
   getCurrentCustomer, 
-  setCurrentCustomer,
-  setToken 
+  setCurrentCustomer 
 } from './api';
 import { translations } from './translations';
 
@@ -15,7 +14,7 @@ import MilkSubTab from './components/MilkSubTab';
 import OrdersView from './components/OrdersView';
 import CartDrawer from './components/CartDrawer';
 import ApartmentModal from './components/ApartmentModal';
-import OtpModal from './components/OtpModal';
+import DeliveryDetailsModal from './components/DeliveryDetailsModal';
 import AdminTrigger from './components/AdminTrigger';
 
 import { Store, Milk, ShoppingBag, ClipboardList, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -33,7 +32,7 @@ export default function App() {
 
   // Modals state
   const [isAptModalOpen, setIsAptModalOpen] = useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isDeliveryDetailsOpen, setIsDeliveryDetailsOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Toast state
@@ -46,7 +45,7 @@ export default function App() {
     }, 3500);
   };
 
-  // Fetch products
+  // Fetch products on load
   useEffect(() => {
     getProducts()
       .then(setProducts)
@@ -59,15 +58,19 @@ export default function App() {
     showToast(`Apartment updated to ${newApt.name}, Flat ${newApt.flat}`, 'success');
   };
 
-  const handleLoginSuccess = (cust) => {
-    setCustomerState(cust);
-  };
-
-  const handleLogout = () => {
-    setCustomerState(null);
-    setCurrentCustomer(null);
-    setToken('');
-    showToast('Logged out', 'success');
+  const handleDeliveryDetailsSuccess = (savedCust) => {
+    setCustomerState(savedCust);
+    if (savedCust.apartment_name) {
+      const updatedApt = {
+        id: savedCust.apartment_id || apartment.id,
+        name: savedCust.apartment_name || savedCust.apartment || apartment.name,
+        block: savedCust.block_wing || apartment.block || 'Block A',
+        flat: savedCust.flat_number || apartment.flat || ''
+      };
+      setApartmentState(updatedApt);
+      setSelectedApartment(updatedApt);
+    }
+    showToast(lang === 'te' ? 'డెలివరీ వివరాలు సేవ్ చేయబడ్డాయి!' : 'Delivery details saved!', 'success');
   };
 
   const handleAddToCart = (item) => {
@@ -126,8 +129,7 @@ export default function App() {
         lang={lang}
         setLang={setLang}
         customer={customer}
-        onOpenLogin={() => setIsLoginModalOpen(true)}
-        onLogout={handleLogout}
+        onOpenEditProfile={() => setIsDeliveryDetailsOpen(true)}
       />
 
       {/* Main View Area */}
@@ -145,7 +147,7 @@ export default function App() {
         {activeTab === 'milk' && (
           <MilkSubTab
             customer={customer}
-            onOpenLogin={() => setIsLoginModalOpen(true)}
+            onOpenDeliveryDetails={() => setIsDeliveryDetailsOpen(true)}
             apartment={apartment}
             showToast={showToast}
             lang={lang}
@@ -156,7 +158,7 @@ export default function App() {
         {activeTab === 'orders' && (
           <OrdersView
             customer={customer}
-            onOpenLogin={() => setIsLoginModalOpen(true)}
+            onOpenDeliveryDetails={() => setIsDeliveryDetailsOpen(true)}
             onRepeatOrder={handleRepeatOrder}
             showToast={showToast}
             lang={lang}
@@ -225,13 +227,12 @@ export default function App() {
         lang={lang}
       />
 
-      <OtpModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-        onLoginSuccess={handleLoginSuccess}
-        apartment={apartment}
+      <DeliveryDetailsModal
+        isOpen={isDeliveryDetailsOpen}
+        onClose={() => setIsDeliveryDetailsOpen(false)}
+        currentCustomer={customer}
+        onSaveSuccess={handleDeliveryDetailsSuccess}
         lang={lang}
-        showToast={showToast}
       />
 
       <CartDrawer
@@ -243,7 +244,7 @@ export default function App() {
         onClearCart={() => setCart([])}
         apartment={apartment}
         customer={customer}
-        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onOpenDeliveryDetails={() => setIsDeliveryDetailsOpen(true)}
         onOrderPlacedSuccess={() => setActiveTab('orders')}
         showToast={showToast}
         lang={lang}

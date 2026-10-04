@@ -153,6 +153,13 @@ export function getCustomerById(id) {
   return apiRequest(`/api/admin/customers/${id}`);
 }
 
+export function updateCustomer(id, payload) {
+  return apiRequest(`/api/admin/customers/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
 // ---------------------------------------------------------------------------
 // 6. WHATSAPP & BROADCAST ALERTS
 // ---------------------------------------------------------------------------

@@ -38,14 +38,14 @@ INSERT INTO `apartment_leads` (`apartment_id`, `phone`) VALUES
 ON DUPLICATE KEY UPDATE `phone` = VALUES(`phone`);
 
 -- 4. SEED 6 PILOT APARTMENT CUSTOMERS IN HMT NAGAR
-INSERT INTO `customers` (`id`, `name`, `phone`, `apartment_id`, `apartment_name`, `block_wing`, `flat_number`, `referral_code`) VALUES
-('c0000001-0000-0000-0000-000000000001', 'Srinivas Rao', '98490 12345', 1, 'Shneha Apartment', 'Block A', '204', 'PALLE-SRI01'),
-('c0000002-0000-0000-0000-000000000002', 'Vani Sharma', '98490 23456', 1, 'Shneha Apartment', 'Block B', '302', 'PALLE-VAN02'),
-('c0000003-0000-0000-0000-000000000003', 'Rajesh Kumar', '98490 34567', 2, 'Amdur Castle Apartment', 'Wing 1', '402', 'PALLE-RAJ03'),
-('c0000004-0000-0000-0000-000000000004', 'Kavitha Reddy', '98490 45678', 3, 'Pally Residency', 'Block B', '105', 'PALLE-KAV04'),
-('c0000005-0000-0000-0000-000000000005', 'Venkat Ramana', '98490 56789', 2, 'Amdur Castle Apartment', 'Tower 1', '501', 'PALLE-VEN05'),
-('c0000006-0000-0000-0000-000000000006', 'Lakshmi Prasanna', '98490 67890', 3, 'Pally Residency', 'North Wing', '203', 'PALLE-LAK06')
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
+INSERT INTO `customers` (`id`, `customer_key`, `name`, `phone`, `apartment_id`, `apartment_name`, `block_wing`, `flat_number`, `referral_code`, `blocked`) VALUES
+('c0000001-0000-0000-0000-000000000001', 'key-cust-0001-srinivas-9849012345', 'Srinivas Rao', '98490 12345', 1, 'Shneha Apartment', 'Block A', '204', 'PALLE-SRI01', 0),
+('c0000002-0000-0000-0000-000000000002', 'key-cust-0002-vani-9849023456', 'Vani Sharma', '98490 23456', 1, 'Shneha Apartment', 'Block B', '302', 'PALLE-VAN02', 0),
+('c0000003-0000-0000-0000-000000000003', 'key-cust-0003-rajesh-9849034567', 'Rajesh Kumar', '98490 34567', 2, 'Amdur Castle Apartment', 'Wing 1', '402', 'PALLE-RAJ03', 0),
+('c0000004-0000-0000-0000-000000000004', 'key-cust-0004-kavitha-9849045678', 'Kavitha Reddy', '98490 45678', 3, 'Pally Residency', 'Block B', '105', 'PALLE-KAV04', 0),
+('c0000005-0000-0000-0000-000000000005', 'key-cust-0005-venkat-9849056789', 'Venkat Ramana', '98490 56789', 2, 'Amdur Castle Apartment', 'Tower 1', '501', 'PALLE-VEN05', 0),
+('c0000006-0000-0000-0000-000000000006', 'key-cust-0006-lakshmi-9849067890', 'Lakshmi Prasanna', '98490 67890', 3, 'Pally Residency', 'North Wing', '203', 'PALLE-LAK06', 0)
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `customer_key` = VALUES(`customer_key`);
 
 -- 5. SEED SAMPLE ORDERS
 INSERT INTO `orders` (`id`, `customer_id`, `apartment_name`, `block_wing`, `flat_number`, `delivery_date`, `delivery_slot`, `total_amount`, `payment_method`, `paid`, `status`, `notes`) VALUES

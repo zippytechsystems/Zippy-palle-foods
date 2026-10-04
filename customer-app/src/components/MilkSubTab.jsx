@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Milk, Calendar, Clock, Check, ShieldCheck, Pause, Play, XCircle } from 'lucide-react';
+import { Milk, Calendar, Clock, Check, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 import { createSubscription } from '../api';
 import { translations } from '../translations';
 
 export default function MilkSubTab({
   customer,
-  onOpenLogin,
+  onOpenDeliveryDetails,
   apartment,
   showToast,
   lang,
@@ -15,13 +15,15 @@ export default function MilkSubTab({
   const [litres, setLitres] = useState('1.0');
   const [frequency, setFrequency] = useState('daily'); // 'daily' | 'alternate'
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleStartSub = async (e) => {
     e.preventDefault();
+    setError('');
 
-    if (!customer || !customer.id) {
-      showToast('Please sign in to start your milk subscription', 'error');
-      onOpenLogin();
+    if (!customer || !customer.phone) {
+      showToast('Please enter your delivery details to start your milk subscription', 'info');
+      onOpenDeliveryDetails();
       return;
     }
 
@@ -40,6 +42,11 @@ export default function MilkSubTab({
       showToast(`Milk subscription started! Delivering to ${apartment.name} Flat ${apartment.flat}`, 'success');
       if (onSubscriptionCreated) onSubscriptionCreated(res);
     } catch (err) {
+      if (err.blocked || (err.message && err.message.includes('contact Palle Natural Foods'))) {
+        setError('Please contact Palle Natural Foods');
+      } else {
+        setError(err.message || 'Failed to start subscription');
+      }
       showToast(err.message, 'error');
     } finally {
       setSubmitting(false);
@@ -67,6 +74,13 @@ export default function MilkSubTab({
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs font-bold flex items-start space-x-2">
+          <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Subscription Form */}
       <form onSubmit={handleStartSub} className="bg-white p-5 rounded-3xl border border-[#e0ddd2] shadow-sm space-y-4">
@@ -135,6 +149,7 @@ export default function MilkSubTab({
         <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200 text-xs">
           <div className="font-bold text-gray-800">Delivering To:</div>
           <div className="text-gray-600 font-medium">
+            {customer && customer.name ? `${customer.name} • ` : ''}
             {apartment.name}, Flat {apartment.flat} ({apartment.block}) • HMT Nagar
           </div>
         </div>
@@ -150,9 +165,16 @@ export default function MilkSubTab({
         <button
           type="submit"
           disabled={submitting}
-          className="w-full py-3 bg-[#2d6a4f] hover:bg-[#1b4332] text-white rounded-2xl text-xs font-bold uppercase tracking-wider shadow-md transition disabled:opacity-50"
+          className="w-full py-3.5 bg-[#2d6a4f] hover:bg-[#1b4332] active:scale-[0.99] text-white rounded-2xl text-xs font-extrabold uppercase tracking-wider shadow-md transition disabled:opacity-50 flex items-center justify-center space-x-2"
         >
-          {submitting ? 'Starting Subscription...' : t.sub.startSub}
+          {submitting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Starting Subscription...</span>
+            </>
+          ) : (
+            <span>{t.sub.startSub}</span>
+          )}
         </button>
 
         <p className="text-[11px] text-gray-400 text-center">

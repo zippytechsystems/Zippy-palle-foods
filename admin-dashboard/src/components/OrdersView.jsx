@@ -325,8 +325,29 @@ export default function OrdersView({
                                     </span>
                                   </div>
 
-                                  <div className="text-xs text-gray-700 mt-1 font-medium">
-                                    <span className="font-bold text-[#2d6a4f]">{order.customer_name}</span> • {order.block_wing}, Flat {order.flat_number} • {order.customer_phone}
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs text-gray-700 font-medium">
+                                    <span className="font-bold text-[#2d6a4f]">{order.customer_name}</span>
+                                    <span>•</span>
+                                    <span>{order.block_wing}, Flat {order.flat_number}</span>
+                                    <span>•</span>
+                                    <a
+                                      href={`tel:${order.customer_phone}`}
+                                      className="inline-flex items-center space-x-1 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-lg text-[11px] font-bold transition"
+                                      title="Call Resident"
+                                    >
+                                      <Phone className="w-3 h-3 text-[#2d6a4f]" />
+                                      <span>{order.customer_phone}</span>
+                                    </a>
+                                    <a
+                                      href={`https://wa.me/91${(order.customer_phone || '').replace(/[^0-9]/g, '').slice(-10)}?text=${encodeURIComponent(`Namaste ${order.customer_name}! Palle Natural Foods here regarding your order #${order.id}.`)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center space-x-1 text-green-700 bg-green-50 hover:bg-green-100 border border-green-300 px-2 py-0.5 rounded-lg text-[11px] font-bold transition"
+                                      title="WhatsApp Resident"
+                                    >
+                                      <MessageSquare className="w-3 h-3 text-green-600" />
+                                      <span>WhatsApp</span>
+                                    </a>
                                   </div>
 
                                   <div className="text-[11px] text-gray-400 mt-0.5">

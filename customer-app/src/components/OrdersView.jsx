@@ -5,33 +5,42 @@ import {
   CheckCircle2, 
   RotateCcw, 
   Star, 
-  Share2, 
   Copy, 
+  Milk,
+  Pause,
+  Play,
+  Calendar,
   AlertCircle 
 } from 'lucide-react';
-import { getCustomerOrders, rateOrder } from '../api';
+import { getMyOrders, getMySubscriptions, pauseSubscription, resumeSubscription, rateOrder } from '../api';
 import { translations } from '../translations';
 
 export default function OrdersView({
   customer,
-  onOpenLogin,
+  onOpenDeliveryDetails,
   onRepeatOrder,
   showToast,
   lang
 }) {
   const t = translations[lang];
   const [orders, setOrders] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [updatingSubId, setUpdatingSubId] = useState(null);
   const [ratingOrder, setRatingOrder] = useState(null);
   const [stars, setStars] = useState(5);
   const [feedback, setFeedback] = useState('');
 
-  const fetchOrders = async () => {
-    if (!customer || !customer.id) return;
+  const fetchData = async () => {
+    if (!customer || !customer.phone) return;
     try {
       setLoading(true);
-      const data = await getCustomerOrders(customer.id);
-      setOrders(data);
+      const [ordersData, subsData] = await Promise.all([
+        getMyOrders().catch(() => []),
+        getMySubscriptions().catch(() => [])
+      ]);
+      setOrders(ordersData || []);
+      setSubscriptions(subsData || []);
     } catch (err) {
       console.warn('Could not load orders:', err.message);
     } finally {
@@ -40,8 +49,26 @@ export default function OrdersView({
   };
 
   useEffect(() => {
-    fetchOrders();
+    fetchData();
   }, [customer]);
+
+  const handleToggleSub = async (sub) => {
+    try {
+      setUpdatingSubId(sub.id);
+      if (sub.status === 'active') {
+        await pauseSubscription(sub.id);
+        showToast('Daily milk delivery paused', 'info');
+      } else {
+        await resumeSubscription(sub.id);
+        showToast('Daily milk delivery resumed!', 'success');
+      }
+      fetchData();
+    } catch (err) {
+      showToast(err.message || 'Failed to update subscription', 'error');
+    } finally {
+      setUpdatingSubId(null);
+    }
+  };
 
   const handleRateSubmit = async (e) => {
     e.preventDefault();
@@ -51,7 +78,7 @@ export default function OrdersView({
       await rateOrder(ratingOrder.id, stars, feedback);
       showToast('Thank you for your feedback! ⭐', 'success');
       setRatingOrder(null);
-      fetchOrders();
+      fetchData();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -63,17 +90,19 @@ export default function OrdersView({
     showToast(`Referral code ${code} copied! Share with neighbors.`, 'success');
   };
 
-  if (!customer || !customer.id) {
+  if (!customer || !customer.phone) {
     return (
       <div className="p-8 text-center space-y-4">
         <Package className="w-16 h-16 mx-auto text-gray-300" />
-        <h3 className="font-extrabold text-base text-gray-700">Track Your Orders & History</h3>
-        <p className="text-xs text-gray-500">Sign in with your mobile number to view and track your apartment deliveries.</p>
+        <h3 className="font-extrabold text-base text-gray-700">Track Your Orders & Subscriptions</h3>
+        <p className="text-xs text-gray-500">
+          Enter your delivery details to track active orders, pause/resume daily milk, and view order history.
+        </p>
         <button
-          onClick={onOpenLogin}
-          className="px-6 py-2.5 bg-[#1b4332] text-white rounded-xl text-xs font-bold uppercase tracking-wider"
+          onClick={onOpenDeliveryDetails}
+          className="px-6 py-2.5 bg-[#2d6a4f] hover:bg-[#1b4332] text-white rounded-2xl text-xs font-bold uppercase tracking-wider shadow-sm transition"
         >
-          {t.common.login}
+          Enter Delivery Details
         </button>
       </div>
     );
@@ -102,6 +131,65 @@ export default function OrdersView({
           <Copy className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Active Milk Subscriptions Section */}
+      {subscriptions.length > 0 && (
+        <div className="space-y-2.5">
+          <h3 className="font-extrabold text-sm text-[#1b4332] flex items-center space-x-1.5">
+            <Milk className="w-4 h-4 text-[#2d6a4f]" />
+            <span>Active Milk Subscriptions ({subscriptions.length})</span>
+          </h3>
+
+          <div className="space-y-2">
+            {subscriptions.map(sub => {
+              const isActive = sub.status === 'active';
+              return (
+                <div key={sub.id} className="bg-white p-4 rounded-3xl border border-[#e2dfd4] shadow-xs flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-extrabold text-sm text-[#1b4332]">
+                        {sub.litres}L Morning Health Milk
+                      </span>
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                        isActive 
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
+                          : 'bg-amber-50 text-amber-800 border-amber-300'
+                      }`}>
+                        {sub.status}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">
+                      Schedule: <strong>{sub.frequency === 'daily' ? 'Daily Morning' : 'Alternate Days'}</strong> (6:00 - 8:00 AM)
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleToggleSub(sub)}
+                    disabled={updatingSubId === sub.id}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1 border transition ${
+                      isActive
+                        ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                        : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                    }`}
+                  >
+                    {isActive ? (
+                      <>
+                        <Pause className="w-3 h-3" />
+                        <span>Pause</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3 h-3" />
+                        <span>Resume</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Orders List */}
       <div>
@@ -144,7 +232,7 @@ export default function OrdersView({
                     <div className="text-right">
                       <div className="font-black text-sm text-[#1b4332]">₹{ord.total_amount}</div>
                       <span className="text-[10px] font-semibold text-gray-400 uppercase">
-                        {ord.paid ? 'Paid' : 'Unpaid'}
+                        {ord.paid ? 'Paid' : 'Unpaid (COD)'}
                       </span>
                     </div>
                   </div>
